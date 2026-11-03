@@ -90,6 +90,10 @@ export const DEFAULT_SEARCH_SAFESEARCH = 0
 export const DEFAULT_SEARCH_TIMEOUT_SECONDS = 20
 /** Result count requested when the seam's request carries no `maxResults`. */
 export const DEFAULT_SEARCH_MAX_RESULTS = 10
+/** Opt-in: let the plugin manage a dedicated SearXNG Docker container. */
+export const DEFAULT_SEARXNG_MANAGED = false
+/** Host port the managed SearXNG container publishes on loopback. */
+export const DEFAULT_SEARXNG_PORT = 8888
 
 /**
  * Standard credential reference per adapter. The section's `apiKeyEnv` is
@@ -332,6 +336,10 @@ export interface Config {
   searchTimeoutSeconds: Volatile<number>
   /** Result count requested when the seam's request carries no `maxResults`. */
   searchMaxResults: Volatile<number>
+  /** Manage a dedicated SearXNG Docker container (one-click deployment). */
+  searxngManaged: Volatile<boolean>
+  /** Host port the managed container publishes on loopback. */
+  searxngPort: Volatile<number>
 }
 
 /** One instant's resolved section shape: the plain values every consumer uses. */
@@ -396,6 +404,10 @@ export interface SectionShape {
   searchTimeoutSeconds: number
   /** Result count requested when the seam's request carries no `maxResults`. */
   searchMaxResults: number
+  /** Manage a dedicated SearXNG Docker container (one-click deployment). */
+  searxngManaged: boolean
+  /** Host port the managed container publishes on loopback. */
+  searxngPort: number
 }
 
 /**
@@ -444,6 +456,8 @@ export function resolveSection(config: Config): Section {
     searchSafesearch: config.searchSafesearch.get(),
     searchTimeoutSeconds: config.searchTimeoutSeconds.get(),
     searchMaxResults: config.searchMaxResults.get(),
+    searxngManaged: config.searxngManaged.get(),
+    searxngPort: config.searxngPort.get(),
   }
 }
 
@@ -487,4 +501,6 @@ export const Config = z.object({
   searchSafesearch: z.natural().max(2).default(DEFAULT_SEARCH_SAFESEARCH).volatile(),
   searchTimeoutSeconds: z.natural().default(DEFAULT_SEARCH_TIMEOUT_SECONDS).volatile(),
   searchMaxResults: z.natural().default(DEFAULT_SEARCH_MAX_RESULTS).volatile(),
+  searxngManaged: z.boolean().default(DEFAULT_SEARXNG_MANAGED).volatile(),
+  searxngPort: z.natural().default(DEFAULT_SEARXNG_PORT).volatile(),
 })

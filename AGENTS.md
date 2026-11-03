@@ -34,13 +34,14 @@ pnpm test        # vitest
 - `src/provider.ts` — `ThirdPartyFetchProvider`: routing chain, budget, cache, SSRF pre-check
 - `src/search-provider.ts` — `ThirdPartySearchProvider` (registered as `third-party` in the SEARCH registry, which is a separate map from fetch): chain + search cache, no budget, no SSRF pre-check, per-request timeout
 - `src/settings.ts` — the volatile config schema + `Section` snapshot type + provider-resolution helpers (`resolveProvider` for fetch, `resolveSearchProvider` for search; single source of truth for config fields)
-- `src/bridge.ts` — runtime-state bridge routes `/api/fetch-third-party/{test,search-test,chain}`
+- `src/bridge.ts` — runtime-state bridge routes `/api/fetch-third-party/{test,search-test,chain,searxng-status,searxng-provision,searxng-remove}`
 - `src/tool.ts` — the `web_fetch_url` model tool (configurable name, conflict fallback, hot re-registration). Search needs NO tool: the official `web_search` reaches the provider through `ctx.web.search()`.
 - `src/fallback.ts` — dynamic fallback chain (quota/failure cooldown, exponential backoff); shared by fetch and search
 - `src/cache.ts` — generic `TtlLruCache<T>` plus key-normalizing `FetchCache` (by URL) and `SearchCache` (by query+parameters)
 - `src/ssrf.ts` — SSRF utilities (exported; used by the FETCH provider pre-check only — never on the search endpoint)
 - `src/structure.ts` — structured output extraction (title/headings/links/stats)
 - `src/local-stack.ts` — self-healing local stack, two levels: the container watchdog (needsContainer) keeps the Crawl4AI container alive for BOTH native `crawl4ai` entries at loopback:11235 AND contract-v1 `custom` entries, re-checked every 20s (docker attempts back off 60s); the wrapper (needsWrapper) spawns only for contract-v1 entries. Remote or non-standard-port crawl4ai entries are not adopted.
+- `src/searxng-stack.ts` — managed SearXNG Docker container (2.1 one-click deployment), mirroring the local-stack patterns: owned container name `dsh-fetch-search-searxng` (NEVER the generic `searxng` — a user's own instance is detected via the JSON probe and reported as an existing instance, never adopted), managed settings.yml in `$DSH_HOME/searxng-stack/` (json formatter on, limiter off, generated secret written once), two-tier health (cheap port probe in the watchdog, real JSON probe only at provision/status), `docker run` timeout 600s because first run pulls the image, `--restart unless-stopped` + watchdog belt-and-braces, `stopWatchdogOnly()` on plugin unload (the container outlives DSH on purpose).
 - `src/adapters/` — tavily / jina / firecrawl / crawl4ai (native `/md`, self-hosted) / custom (contract v1)
 - `src/client/index.ts` — browser half: locale + `settings.section` page + `plugins.bundle.config` seat + credentials event bridge
 - `src/client/card-controller.ts` — form (`configForms`) + credentials Remote bridge onto the card; one silent retry per field write (a Loader recomposition bumps the settings revision fence — fingerprint includes the fiber uid — and the form's recovery reloads the fresh revision, so the retry absorbs the race)

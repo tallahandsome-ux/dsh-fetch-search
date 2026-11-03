@@ -20,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { TestFetchResult } from './provider.ts'
 import type { TestSearchResult } from './search-provider.ts'
 import type { ChainRow } from './fallback.ts'
+import type { SearxngStatus } from './searxng-stack.ts'
 
 /** Route prefix for this plugin's runtime-state bridge. */
 const BRIDGE_PREFIX = '/api/fetch-third-party'
@@ -30,12 +31,17 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 /** Max request body the bridge accepts (guard against runaway local payloads). */
 const MAX_BODY_BYTES = 1024 * 1024
 
-/** Mount the runtime-state bridge routes (test fetch, test search, live chain view). */
+/** Mount the runtime-state bridge routes (test fetch, test search, live chain view, SearXNG stack). */
 export function mountFetchBridge(
   ctx: Context,
   test: (url: string) => Promise<TestFetchResult>,
   chain: () => ChainRow[],
   searchTest: (query: string) => Promise<TestSearchResult>,
+  searxng: {
+    status: () => Promise<SearxngStatus>
+    provision: () => Promise<SearxngStatus>
+    remove: (purge: boolean) => Promise<SearxngStatus>
+  },
 ): void {
   ctx.inject(['webServer'], (sctx) => {
     sctx.effect(() => {
@@ -54,6 +60,21 @@ export function mountFetchBridge(
           kind: 'exact',
           path: `${BRIDGE_PREFIX}/chain`,
           handler: (req, res) => void handleChain(chain, req, res),
+        }),
+        sctx.webServer.register({
+          kind: 'exact',
+          path: `${BRIDGE_PREFIX}/searxng-status`,
+          handler: (req, res) => void handleSearxngStatus(searxng.status, req, res),
+        }),
+        sctx.webServer.register({
+          kind: 'exact',
+          path: `${BRIDGE_PREFIX}/searxng-provision`,
+          handler: (req, res) => void handleSearxngProvision(searxng.provision, req, res),
+        }),
+        sctx.webServer.register({
+          kind: 'exact',
+          path: `${BRIDGE_PREFIX}/searxng-remove`,
+          handler: (req, res) => void handleSearxngRemove(searxng.remove, req, res),
         }),
       ]
       return () => { for (const dispose of disposers) dispose() }
@@ -97,6 +118,55 @@ async function handleSearchTest(
   const query = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'searxng test'
   try {
     return sendJson(res, 200, await searchTest(query))
+  } catch (error) {
+    return sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+/** GET the managed SearXNG stack status (cheap; the phase is manager-cached). */
+async function handleSearxngStatus(
+  status: () => Promise<SearxngStatus>,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (!loopbackPeer(req)) return sendJson(res, 403, { error: 'loopback-only' })
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' })
+  return sendJson(res, 200, await status())
+}
+
+/**
+ * POST kick off one provisioning pass. Long-running (an image pull can take
+ * minutes behind a daemon proxy), so it returns immediately with the current
+ * phase — the card polls `searxng-status` until it settles.
+ */
+async function handleSearxngProvision(
+  provision: () => Promise<SearxngStatus>,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (!loopbackPeer(req)) return sendJson(res, 403, { error: 'loopback-only' })
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+  try {
+    void provision().catch(() => { /* the phase carries the failure */ })
+    return sendJson(res, 200, { started: true })
+  } catch (error) {
+    return sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  }
+}
+
+/** POST `{ purge?: boolean }` removes the managed container (and optionally the config). */
+async function handleSearxngRemove(
+  remove: (purge: boolean) => Promise<SearxngStatus>,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (!loopbackPeer(req)) return sendJson(res, 403, { error: 'loopback-only' })
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'method not allowed' })
+  const body = await readJsonOr400(req, res)
+  if (body === null) return
+  const { purge } = body as { purge?: unknown }
+  try {
+    return sendJson(res, 200, await remove(purge === true))
   } catch (error) {
     return sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
   }

@@ -1,6 +1,6 @@
 {
   "name": "dsh-fetch-search",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Third-party web access for dsh: safe page fetching (Tavily / Jina / Firecrawl / custom crawler via contract v1) plus self-hosted SearXNG search, both registered into the ctx.web seam. The local machine never fetches arbitrary URLs (no SSRF surface); API keys live only in the managed credentials store; per-session fetch budget caps usage; a bundled Crawl4AI stack can be auto-managed.",
   "license": "MIT",
   "type": "module",

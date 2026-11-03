@@ -19,6 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FetchCardFace, FetchCardState, SectionValues } from './card-controller.ts'
+import type { FetchCardLocaleKey } from './locales.ts'
 
 /** One row of the live fallback chain. */
 interface ChainRow {
@@ -45,6 +46,16 @@ interface SearchTestResult {
   top: { title?: string; url: string }[]
   durationMs: number
   error?: string
+}
+
+/** The managed SearXNG stack status (`/searxng-status`). */
+interface SearxngStatus {
+  phase: 'idle' | 'checking' | 'docker-missing' | 'port-foreign' | 'pulling' | 'starting' | 'running' | 'error'
+  detail: string
+  containerName: string
+  port: number
+  existingInstance: boolean
+  portUp: boolean
 }
 
 /** The card's editable mirror of the section values plus the key's credential state. */
@@ -74,6 +85,21 @@ type FetchSurfaceProps = PropsLocale<'fetch-third-party'> & InjectFace<FetchCard
 const TEST_URL = '/api/fetch-third-party/test'
 const CHAIN_URL = '/api/fetch-third-party/chain'
 const SEARCH_TEST_URL = '/api/fetch-third-party/search-test'
+const SEARXNG_STATUS_URL = '/api/fetch-third-party/searxng-status'
+const SEARXNG_PROVISION_URL = '/api/fetch-third-party/searxng-provision'
+const SEARXNG_REMOVE_URL = '/api/fetch-third-party/searxng-remove'
+
+/** Phase -> locale key (explicit map: the locale union is closed, not dynamic). */
+const PHASE_LABEL: Record<SearxngStatus['phase'], FetchCardLocaleKey> = {
+  idle: 'deployPhaseIdle',
+  checking: 'deployPhaseChecking',
+  'docker-missing': 'deployPhaseDockerMissing',
+  'port-foreign': 'deployPhasePortForeign',
+  pulling: 'deployPhasePulling',
+  starting: 'deployPhaseStarting',
+  running: 'deployPhaseRunning',
+  error: 'deployPhaseError',
+}
 
 /** Search adapters this build ships (one today). */
 const SEARCH_ADAPTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
@@ -167,6 +193,9 @@ function FetchSurface(props: FetchSurfaceProps) {
   const [searchQuery, setSearchQuery] = useState('searxng test')
   const [searching, setSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<SearchTestResult | null>(null)
+  const [searxngStatus, setSearxngStatus] = useState<SearxngStatus | null>(null)
+  const [deploying, setDeploying] = useState(false)
+  const [deployPurge, setDeployPurge] = useState(false)
 
   // The Host form pushes authoritative values after every write (and after
   // edits made on other surfaces); re-mirror them into the local editable
@@ -272,6 +301,60 @@ function FetchSurface(props: FetchSurfaceProps) {
       setSearchResult({ ok: false, servedBy: '', count: 0, top: [], durationMs: 0, error: String(error) })
     } finally {
       setSearching(false)
+    }
+  }
+
+  const loadSearxngStatus = async (): Promise<void> => {
+    try {
+      const res = await fetch(SEARXNG_STATUS_URL)
+      if (res.ok) setSearxngStatus(await res.json() as SearxngStatus)
+    } catch {
+      // keep the last known status
+    }
+  }
+
+  useEffect(() => { void loadSearxngStatus() }, [])
+
+  // While a deployment is in flight (or a container runs), keep the status
+  // fresh: a 2.5s poll only while the surface is mounted, pausing on idle.
+  useEffect(() => {
+    const phase = searxngStatus?.phase
+    if (phase !== 'checking' && phase !== 'pulling' && phase !== 'starting') return
+    const timer = setInterval(() => { void loadSearxngStatus() }, 2500)
+    return () => clearInterval(timer)
+  }, [searxngStatus?.phase])
+
+  const runDeploy = async (): Promise<void> => {
+    setDeploying(true)
+    setSearxngStatus(prev => prev
+      ? { ...prev, phase: 'checking', detail: '' }
+      : { phase: 'checking', detail: '', containerName: 'dsh-fetch-search-searxng', port: view?.searxngPort ?? 8888, existingInstance: false, portUp: false })
+    try {
+      await fetch(SEARXNG_PROVISION_URL, { method: 'POST' })
+      // First tick immediately, then the effect above keeps polling.
+      await loadSearxngStatus()
+    } catch (error) {
+      setSearxngStatus(prev => prev
+        ? { ...prev, phase: 'error', detail: String(error) }
+        : prev)
+    } finally {
+      setDeploying(false)
+    }
+  }
+
+  const runSearxngRemove = async (): Promise<void> => {
+    setDeploying(true)
+    try {
+      const res = await fetch(SEARXNG_REMOVE_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ purge: deployPurge }),
+      })
+      if (res.ok) setSearxngStatus(await res.json() as SearxngStatus)
+    } catch {
+      // keep the last known status
+    } finally {
+      setDeploying(false)
     }
   }
 
@@ -946,6 +1029,76 @@ function FetchSurface(props: FetchSurfaceProps) {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── 本地 Docker 一键部署 ── */}
+          <button style={styles.section} onClick={() => setSearchOpen(prev => !prev)} aria-expanded={searchOpen}>
+            <span style={styles.sectionLabel}>{t('deploySection')}</span>
+            <span style={styles.chevron}>{searchOpen ? '▾' : '▸'}</span>
+          </button>
+          {searchOpen && (
+            <div style={styles.sectionBody}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={view.searxngManaged}
+                  disabled={disabled}
+                  onChange={(event) => void saveField('searxngManaged', event.target.checked)}
+                />
+                <span style={styles.label}>{t('deployManaged')}</span>
+              </div>
+              <p style={styles.hint}>{t('deployManagedHint')}</p>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('deployPort')}</span>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={view.searxngPort}
+                  disabled={disabled}
+                  onBlur={(event) => void saveField('searxngPort', Number(event.target.value))}
+                />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={styles.button}
+                  disabled={disabled || deploying || searxngStatus?.phase === 'running' || searxngStatus?.phase === 'pulling' || searxngStatus?.phase === 'starting'}
+                  onClick={() => void runDeploy()}
+                >
+                  {deploying || searxngStatus?.phase === 'pulling' || searxngStatus?.phase === 'starting' ? t('deployRunning') : t('deployRun')}
+                </button>
+                <button
+                  style={styles.buttonGhost}
+                  disabled={disabled || deploying}
+                  onClick={() => void runSearxngRemove()}
+                >
+                  {t('deployRemove')}
+                </button>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#555' }}>
+                <input
+                  type="checkbox"
+                  checked={deployPurge}
+                  onChange={(event) => setDeployPurge(event.target.checked)}
+                />
+                {t('deployPurge')}
+              </label>
+
+              {searxngStatus !== null && (
+                <div style={{ fontSize: 12, lineHeight: 1.7, color: searxngStatus.phase === 'running' ? '#1a7f37' : searxngStatus.phase === 'error' ? '#b42318' : '#555' }}>
+                  <div>
+                    {t('deployStatus')}: {PHASE_LABEL[searxngStatus.phase]}
+                    {searxngStatus.portUp ? ` · :${searxngStatus.port}` : ''}
+                  </div>
+                  {searxngStatus.detail !== '' && <div style={{ color: '#666' }}>{searxngStatus.detail}</div>}
+                  {searxngStatus.existingInstance && <div style={{ color: '#1a7f37' }}>{t('deployExisting')}</div>}
+                </div>
+              )}
+              <p style={styles.hint}>{t('deployHint')}</p>
             </div>
           )}
 

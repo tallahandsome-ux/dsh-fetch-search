@@ -39,9 +39,10 @@ curl -s -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8888/search?q=test&fo
 
 ## 4. 验活方式
 
-- 插件卡片 / 桥接：`POST /api/fetch-third-party/search-test`，body `{"query":"..."}`，返回 `{ok, servedBy, count, top[], durationMs, error?}`。
-- 直接看实例统计页 `/stats`：每引擎成功率与耗时。
-- `docker logs <container> --tail 50`：逐引擎报错。
+- **卡片一键部署（2.1 起）**：设置 → 网页抓取与搜索 → 「本地 Docker 一键部署」→ 勾选「部署托管 SearXNG 容器」→ 一键部署。插件自动写好 settings.yml（json 开、limiter 关、生成 secret）到 `$DSH_HOME\searxng-stack\`、创建并保活容器 `dsh-fetch-search-searxng`（`--restart unless-stopped` + watchdog 双保险）、状态实时显示。已有一个可用实例时显示「无需部署」且绝不接管。
+- 桥接路由：`GET /api/fetch-third-party/searxng-status`、`POST /api/fetch-third-party/searxng-provision`、`POST /api/fetch-third-party/searxng-remove`（body `{"purge":true}` 连托管配置一起删）。
+- 搜索测试：`POST /api/fetch-third-party/search-test`，body `{"query":"..."}`，返回 `{ok, servedBy, count, top[], durationMs, error?}`。
+- 手动验活：直接看实例统计页 `/stats`，或 `docker logs <container> --tail 50` 逐引擎报错。
 
 ## 5. 冷启动与超时
 

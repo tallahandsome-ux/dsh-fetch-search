@@ -63,6 +63,9 @@ export interface SectionValues {
   searchSafesearch: number
   searchTimeoutSeconds: number
   searchMaxResults: number
+  /** Managed SearXNG Docker container (one-click deployment). */
+  searxngManaged: boolean
+  searxngPort: number
 }
 
 /** Standard credential reference each built-in adapter defaults to. */
@@ -107,6 +110,8 @@ const DEFAULT_VALUES: SectionValues = {
   searchSafesearch: 0,
   searchTimeoutSeconds: 20,
   searchMaxResults: 10,
+  searxngManaged: false,
+  searxngPort: 8888,
 }
 
 /** What the fetch card renders. */

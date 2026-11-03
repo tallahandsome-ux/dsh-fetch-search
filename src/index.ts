@@ -17,6 +17,7 @@ import { mountFetchBridge } from './bridge.ts'
 import { LocalStackManager } from './local-stack.ts'
 import { ThirdPartyFetchProvider } from './provider.ts'
 import { ThirdPartySearchProvider } from './search-provider.ts'
+import { SearxngStackManager } from './searxng-stack.ts'
 import { resolveSection, type Config } from './settings.ts'
 import { applyWebFetchUrlTool } from './tool.ts'
 
@@ -47,6 +48,10 @@ export function apply(ctx: Context, config: Config): void {
   // Auto-manages the local wrapper (and best-effort the Crawl4AI container)
   // while a loopback custom provider is the primary or fallback.
   const stack = new LocalStackManager(current)
+
+  // Opt-in managed SearXNG container (one-click deployment): provisioning,
+  // keep-alive watchdog, and removal — mirroring the local-stack patterns.
+  const searxngStack = new SearxngStackManager(current)
 
   const budget = new FetchBudget(() => current().maxFetchesPerSession)
   const cache = new FetchCache(
@@ -83,14 +88,28 @@ export function apply(ctx: Context, config: Config): void {
 
   // The tool re-registers itself when the live `toolName` preference changes.
   applyWebFetchUrlTool(ctx, config)
-  mountFetchBridge(ctx, (url) => provider.testFetch(url), () => provider.chainSnapshot(), (query) => searchProvider.testSearch(query))
+  mountFetchBridge(
+    ctx,
+    (url) => provider.testFetch(url),
+    () => provider.chainSnapshot(),
+    (query) => searchProvider.testSearch(query),
+    {
+      status: () => searxngStack.status(),
+      provision: () => searxngStack.provision(),
+      remove: (purge) => searxngStack.remove(purge),
+    },
+  )
 
   // Volatile edits arrive as loader events: drive the initial stack sync, keep
-  // it in step with later provider switches, and register/unregister search.
+  // it in step with later provider switches, register/unregister search, and
+  // provision/retire the managed SearXNG container.
   // (The tool subscribes the same way inside applyWebFetchUrlTool.)
   void stack.sync()
-  ctx.on('loader/volatile-update', () => { syncSearch(); void stack.sync() })
+  void searxngStack.sync()
+  ctx.on('loader/volatile-update', () => { syncSearch(); void stack.sync(); void searxngStack.sync() })
 
-  // Kill the wrapper child when the plugin unloads (dsh web shuts down).
-  ctx.effect(() => () => { disposeSearch?.(); disposeSearch = undefined; stack.shutdown() })
+  // Kill the wrapper child when the plugin unloads (dsh web shuts down). The
+  // managed SearXNG container outlives the plugin on purpose (--restart
+  // unless-stopped): only its watchdog dies here.
+  ctx.effect(() => () => { disposeSearch?.(); disposeSearch = undefined; stack.shutdown(); searxngStack.stopWatchdogOnly() })
 }

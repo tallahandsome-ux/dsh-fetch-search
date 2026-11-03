@@ -34,6 +34,11 @@ export type FetchCardLocaleKey =
   | 'searchKeyRef' | 'searchAuthHeader' | 'searchAuthPrefix' | 'searchAuthHint'
   | 'searchTestQuery' | 'searchTestRun' | 'searchTesting' | 'searchTestHint' | 'searchResultOk' | 'searchResultFail'
   | 'searchPinHint'
+  | 'deploySection' | 'deployManaged' | 'deployManagedHint' | 'deployPort' | 'deployRun' | 'deployRunning'
+  | 'deployRemove' | 'deployPurge' | 'deployStatus' | 'deployHint'
+  | 'deployPhaseIdle' | 'deployPhaseChecking' | 'deployPhaseDockerMissing' | 'deployPhasePortForeign'
+  | 'deployPhasePulling' | 'deployPhaseStarting' | 'deployPhaseRunning' | 'deployPhaseError'
+  | 'deployExisting'
 
 /** English copy. */
 export const en: Record<FetchCardLocaleKey, string> = {
@@ -129,6 +134,25 @@ export const en: Record<FetchCardLocaleKey, string> = {
   searchResultOk: 'OK — served by',
   searchResultFail: 'Failed',
   searchPinHint: 'A DSH restart is required after enabling: the profile `web` row must pin `searchProvider: third-party` (it replaces the whole row config, so restate `fetchProvider` too).',
+  deploySection: 'Local Docker one-click deployment',
+  deployManaged: 'Deploy a managed SearXNG container',
+  deployManagedHint: 'The plugin creates container `dsh-fetch-search-searxng`, writes the instance settings (json formatter on, limiter off, generated secret) and keeps it alive. Your own SearXNG containers are never touched.',
+  deployPort: 'Host port (loopback)',
+  deployRun: 'One-click deploy',
+  deployRunning: 'Deploying…',
+  deployRemove: 'Remove container',
+  deployPurge: 'also delete the managed config',
+  deployStatus: 'Status',
+  deployHint: 'Ready = point `searchBaseURL` at the port above (it is prefilled), then enable the search provider.',
+  deployPhaseIdle: 'Not deployed',
+  deployPhaseChecking: 'Checking Docker and port…',
+  deployPhaseDockerMissing: 'Docker is not reachable — start Docker Desktop first',
+  deployPhasePortForeign: 'The port is held by another service (JSON probe failed) — pick a different port',
+  deployPhasePulling: 'Pulling the image (first run; can take minutes behind a proxy)…',
+  deployPhaseStarting: 'Starting the container…',
+  deployPhaseRunning: 'Running',
+  deployPhaseError: 'Error',
+  deployExisting: 'An existing working SearXNG answers on this port — nothing to deploy.',
 }
 
 /** 中文文案。 */
@@ -225,4 +249,23 @@ export const zh: Record<FetchCardLocaleKey, string> = {
   searchResultOk: '成功 — 由以下服务返回',
   searchResultFail: '失败',
   searchPinHint: '启用后需要重启 DSH：profile 的 `web` 行必须钉住 `searchProvider: third-party`（该行是整行替换，务必同时重述 `fetchProvider`）。',
+  deploySection: '本地 Docker 一键部署',
+  deployManaged: '部署托管 SearXNG 容器',
+  deployManagedHint: '插件创建容器 `dsh-fetch-search-searxng`，自动写入实例配置（json 格式开启、limiter 关闭、生成 secret）并保活。绝不会碰你自己部署的 SearXNG 容器。',
+  deployPort: '宿主端口（仅本机）',
+  deployRun: '一键部署',
+  deployRunning: '部署中…',
+  deployRemove: '移除容器',
+  deployPurge: '同时清除托管配置',
+  deployStatus: '状态',
+  deployHint: '就绪后把 `searchBaseURL` 指向上方端口（默认已预填），再启用搜索 provider 即可。',
+  deployPhaseIdle: '未部署',
+  deployPhaseChecking: '正在检查 Docker 与端口…',
+  deployPhaseDockerMissing: 'Docker 不可达——请先启动 Docker Desktop',
+  deployPhasePortForeign: '端口被其他服务占用（JSON 探测失败）——请换一个端口',
+  deployPhasePulling: '正在拉取镜像（首次较慢；走代理可能需要几分钟）…',
+  deployPhaseStarting: '正在启动容器…',
+  deployPhaseRunning: '运行中',
+  deployPhaseError: '出错',
+  deployExisting: '该端口上已有一个可用的 SearXNG 实例——无需部署。',
 }
