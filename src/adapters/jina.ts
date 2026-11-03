@@ -3,7 +3,7 @@
  * markdown. Anonymous use works without a key (lower rate limits); a Bearer
  * key raises the quota. Response shape verified against the live API
  * (JSON mode): `{ code, status, data: { title, url, content, ... } }`.
- * @module dsh-fetch-third-party/adapters/jina
+ * @module dsh-fetch-search/adapters/jina
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

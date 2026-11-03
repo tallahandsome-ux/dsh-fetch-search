@@ -4,7 +4,7 @@
  * Reference: Firecrawl official REST docs (https://docs.firecrawl.dev).
  * Unlike Jina, Firecrawl's keyless free tier only covers OFFICIAL clients
  * (MCP/CLI/SDK), so raw REST /scrape requires an API key.
- * @module dsh-fetch-third-party/adapters/firecrawl
+ * @module dsh-fetch-search/adapters/firecrawl
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

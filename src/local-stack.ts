@@ -1,27 +1,29 @@
 /**
- * Local-stack manager for dsh-fetch-third-party.
+ * Local-stack manager for dsh-fetch-search.
  *
- * Auto-manages the contract-v1 wrapper process (scripts/crawl4ai-wrapper.mjs)
- * so a loopback custom provider (e.g. the bundled Crawl4AI stack) works right
- * after `dsh web` starts — no manual "docker run / node wrapper" commands.
+ * Two levels of self-healing for a local Crawl4AI deployment:
  *
- * Trigger: the primary OR fallback provider is a custom entry whose baseURL is
- * a loopback address. While that holds, the manager (best-effort) ensures the
- * Crawl4AI container is up, spawns the wrapper on 127.0.0.1:8787, and runs a
- * real-time watchdog that restarts the wrapper (and re-checks the container)
- * if it dies — so a crashed process recovers without a dsh restart.
+ * - CONTAINER: while the routing references a local Crawl4AI endpoint — a
+ *   `crawl4ai`-adapter custom entry pointing at the loopback API server
+ *   (direct, no wrapper), or a contract-v1 `custom` entry (whose wrapper needs
+ *   the same container) — the manager (best-effort) ensures the container is
+ *   up, and the watchdog re-checks it continuously, so a container that dies
+ *   mid-run (Docker restart, crash) is restarted without a dsh restart.
+ * - WRAPPER: only a contract-v1 `custom` entry additionally gets the wrapper
+ *   process (scripts/crawl4ai-wrapper.mjs) on 127.0.0.1:8787, restarted by
+ *   the same watchdog when it dies.
  *
  * The wrapper is spawned with a sanitized env (no HTTP(S)_PROXY), because it
  * only ever talks to the local container. On dispose / when the trigger no
  * longer holds, the watchdog is cleared and the wrapper child is killed.
- * @module dsh-fetch-third-party/local-stack
+ * @module dsh-fetch-search/local-stack
  */
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Config } from './settings.ts'
+import type { Section } from './settings.ts'
 
 /** The wrapper's local port (matches the wrapper's WRAPPER_PORT default). */
 const WRAPPER_PORT = 8787
@@ -35,6 +37,20 @@ const DEFAULT_TOKEN = 'dev-crawl4ai-token'
 const WATCHDOG_MS = 20_000
 /** Rate-limit repeated docker attempts when the container stays down. */
 const CONTAINER_COOLDOWN_MS = 60_000
+
+/**
+ * Whether a crawl4ai entry's loopback endpoint targets the managed container's
+ * published port (empty = URL default), so the manager only adopts entries it
+ * can actually heal. Entries on other ports own their lifecycle.
+ */
+function containerPortOf(baseURL: string): boolean {
+  try {
+    const port = new URL(baseURL).port
+    return port === '' || port === String(CRAWL4AI_PORT)
+  } catch {
+    return false
+  }
+}
 
 /** Whether a URL points at the loopback interface. */
 export function isLoopbackURL(url: string): boolean {
@@ -101,22 +117,54 @@ export class LocalStackManager {
   private active = false
   private lastContainerAttempt = 0
 
-  constructor(private readonly config: () => Config) {}
+  constructor(private readonly config: () => Section) {}
 
   /**
-   * Whether the current routing references a loopback custom provider.
+   * Provider names the current routing actually references.
    * Mirrors provider.ts `effectiveChain`: an explicit fallbackChain wins over
-   * the adapter+fallback pair, so a loopback provider placed ONLY in the chain
-   * still triggers the stack (previously it silently never started).
+   * the adapter+fallback pair, so a provider placed ONLY in the chain still
+   * triggers the stack (previously it silently never started).
    */
-  needsLocal(config: Config = this.config()): boolean {
-    const names = config.fallbackChain.length > 0
-      ? config.fallbackChain
+  private routedNames(config: Section): string[] {
+    return config.fallbackChain.length > 0
+      ? [...config.fallbackChain]
       : [config.adapter, config.fallback].filter((name) => name.length > 0)
-    return names.some((name) => {
-      const entry = config.customProviders.find((provider) => provider.name === name)
-      return entry !== undefined && isLoopbackURL(entry.baseURL)
+  }
+
+  /** The routing entry behind one provider name, when it is user-registered. */
+  private entryOf(config: Section, name: string) {
+    return config.customProviders.find((provider) => provider.name === name)
+  }
+
+  /**
+   * Whether the Crawl4AI CONTAINER should be kept alive: the routing
+   * references a crawl4ai-adapter entry at the loopback API server's port, or
+   * a contract-v1 custom entry (whose wrapper talks to the same container).
+   */
+  needsContainer(config: Section = this.config()): boolean {
+    return this.routedNames(config).some((name) => {
+      const entry = this.entryOf(config, name)
+      if (entry === undefined || !isLoopbackURL(entry.baseURL)) return false
+      if ((entry.adapter || 'custom') === 'custom') return true
+      return entry.adapter === 'crawl4ai' && containerPortOf(entry.baseURL)
     })
+  }
+
+  /**
+   * Whether the contract-v1 WRAPPER should be kept alive: only a `custom`
+   * (contract v1) entry speaks the wrapper's protocol; a native `crawl4ai`
+   * entry talks to the container directly and needs no wrapper process.
+   */
+  needsWrapper(config: Section = this.config()): boolean {
+    return this.routedNames(config).some((name) => {
+      const entry = this.entryOf(config, name)
+      return entry !== undefined && (entry.adapter || 'custom') === 'custom' && isLoopbackURL(entry.baseURL)
+    })
+  }
+
+  /** Whether any part of the local stack is needed (container or wrapper). */
+  needsLocal(config: Section = this.config()): boolean {
+    return this.needsContainer(config) || this.needsWrapper(config)
   }
 
   /** Start the stack when needed, stop it when not. */
@@ -124,15 +172,16 @@ export class LocalStackManager {
     if (this.syncing) return
     this.syncing = true
     try {
-      if (this.needsLocal()) {
+      const config = this.config()
+      if (this.needsContainer(config) || this.needsWrapper(config)) {
         this.active = true
         await this.ensureContainer().catch((error) => {
           console.warn(
-            '[dsh-fetch-third-party] Crawl4AI container ensure failed (fetch will fall back):',
+            '[dsh-fetch-search] Crawl4AI container ensure failed (fetch will fall back):',
             error instanceof Error ? error.message : error,
           )
         })
-        await this.ensureWrapper()
+        if (this.needsWrapper(config)) await this.ensureWrapper()
         this.armWatchdog()
       } else {
         this.active = false
@@ -146,23 +195,30 @@ export class LocalStackManager {
   /** Start the periodic watchdog once (cleared in shutdown). */
   private armWatchdog(): void {
     if (this.timer !== null) return
-    this.timer = setInterval(() => { void this.checkWrapper() }, WATCHDOG_MS)
+    this.timer = setInterval(() => { void this.checkStack() }, WATCHDOG_MS)
     // Do not keep the host process alive just for the watchdog.
     this.timer.unref()
   }
 
-  /** Real-time recovery: restart the wrapper when it died but is still needed. */
-  private async checkWrapper(): Promise<void> {
+  /**
+   * Real-time recovery: re-ensure the container while it is needed (a wrapper
+   * being alive says nothing about the container — the watchdog watches the
+   * container itself, so a Docker restart mid-run self-heals), and restart the
+   * wrapper when it died but is still needed. Both paths are idempotent and
+   * rate-limited; docker attempts back off while the container stays down.
+   */
+  private async checkStack(): Promise<void> {
     if (!this.active || this.syncing) return
-    if (this.child !== null) return
-    if (await isPortUp(WRAPPER_PORT)) return // still serving (user- or previous-started)
-    await this.ensureContainer().catch((error) => {
-      console.warn(
-        '[dsh-fetch-third-party] Crawl4AI container ensure failed (fetch will fall back):',
-        error instanceof Error ? error.message : error,
-      )
-    })
-    await this.ensureWrapper()
+    const config = this.config()
+    if (this.needsContainer(config)) {
+      await this.ensureContainer().catch((error) => {
+        console.warn(
+          '[dsh-fetch-search] Crawl4AI container ensure failed (fetch will fall back):',
+          error instanceof Error ? error.message : error,
+        )
+      })
+    }
+    if (this.needsWrapper(config)) await this.ensureWrapper()
   }
 
   /** Ensure the Crawl4AI container answers on its local port. */
@@ -198,7 +254,7 @@ export class LocalStackManager {
     try {
       const script = path.join(packageRoot(), 'scripts', 'crawl4ai-wrapper.mjs')
       if (!existsSync(script)) {
-        console.warn('[dsh-fetch-third-party] wrapper script missing: ' + script)
+        console.warn('[dsh-fetch-search] wrapper script missing: ' + script)
         return
       }
       const child = spawn(process.execPath, [script], {
@@ -218,7 +274,7 @@ export class LocalStackManager {
       child.on('exit', () => {
         if (this.child === child) this.child = null
         // Fast recovery after an unexpected exit (shutdown sets active=false first).
-        setTimeout(() => { void this.checkWrapper() }, 1000)
+        setTimeout(() => { void this.checkStack() }, 1000)
       })
       this.child = child
       // Give it a moment to bind; failures surface on the next fetch.

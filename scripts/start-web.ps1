@@ -1,4 +1,4 @@
-﻿# dsh-fetch-third-party 本地启动脚本（带代理）。
+# dsh-fetch-search 本地启动脚本（带代理）。
 #
 # 背景：部分网络环境会阻断第三方服务直连（如 r.jina.ai 被 DNS 污染），
 # 需走本地 HTTP 代理。Node 的 fetch 要生效代理还需 NODE_USE_ENV_PROXY=1

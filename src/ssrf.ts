@@ -7,7 +7,7 @@
  * effectively bridges to the internal network. The functions here are also
  * exported so a second developer who builds a direct-connect provider can
  * reuse the same guards; see docs/ssrf-hardening.md for the full checklist.
- * @module dsh-fetch-third-party/ssrf
+ * @module dsh-fetch-search/ssrf
  */
 
 import { lookup } from 'node:dns/promises'

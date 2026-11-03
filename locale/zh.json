@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "网页抓取与搜索",
+    "description": "通过你自行配置的第三方服务（Tavily / Jina / Firecrawl / 契约 v1 爬虫）抓取网页全文，并可把搜索换成自建 SearXNG。本机不直连目标网址，无 SSRF 攻击面；内置会话预算、缓存与回退链。"
+  }
+}

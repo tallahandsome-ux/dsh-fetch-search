@@ -5,7 +5,7 @@
  * reaches the configured cap, further calls are refused with a clear error.
  * The cap is read live from the settings section, so raising it in the card
  * takes effect on the next call without a restart.
- * @module dsh-fetch-third-party/budget
+ * @module dsh-fetch-search/budget
  */
 
 /** Outcome of one acquisition attempt. */

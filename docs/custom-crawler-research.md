@@ -1,7 +1,7 @@
 # 自定义爬虫调研报告（供契约 v1 自定义服务商测试选型）
 
 > 状态：调研完成（2026-08-16）。
-> 目标：为 `dsh-fetch-third-party` 的**自定义服务商**测试挑选一个可自建的开源爬虫，按契约 v1（`docs/contract.md`：POST `{url}` → `{content}`）接入。
+> 目标：为 `dsh-fetch-search` 的**自定义服务商**测试挑选一个可自建的开源爬虫，按契约 v1（`docs/contract.md`：POST `{url}` → `{content}`）接入。
 
 ---
 

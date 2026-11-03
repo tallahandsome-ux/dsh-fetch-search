@@ -1,17 +1,21 @@
 {
-  "name": "dsh-fetch-third-party",
-  "version": "1.0.0",
-  "description": "Safe third-party web fetch for dsh: delegates page retrieval to a user-configured third-party service (Tavily / Jina / Firecrawl / custom crawler via contract v1) so the local machine never connects to arbitrary URLs (no SSRF surface). API key lives only in the managed credentials store; per-session fetch budget caps usage; a bundled Crawl4AI stack can be auto-managed.",
+  "name": "dsh-fetch-search",
+  "version": "2.0.0",
+  "description": "Third-party web access for dsh: safe page fetching (Tavily / Jina / Firecrawl / custom crawler via contract v1) plus self-hosted SearXNG search, both registered into the ctx.web seam. The local machine never fetches arbitrary URLs (no SSRF surface); API keys live only in the managed credentials store; per-session fetch budget caps usage; a bundled Crawl4AI stack can be auto-managed.",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "locale",
+    "icon.svg",
     "scripts",
     "docs",
     "cordis.patch.yml",
@@ -29,7 +33,9 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-locale"
       ],
       "platform": "web"
@@ -39,33 +45,36 @@
     "undici": "^6.28.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-credentials": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-web": "^0.1.0-rc.5",
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/cordis": ">=4.0.4 <5 || >=4.0.5-alpha.0 <5",
+    "@deepseek-ai/dsh-credentials": ">=0.2.0-rc.0 <0.2.2",
+    "@deepseek-ai/dsh-launch-environment": ">=0.2.0-rc.0 <0.2.2",
+    "@deepseek-ai/dsh-tools": ">=0.2.0-rc.0 <0.2.2",
+    "@deepseek-ai/dsh-web": ">=0.2.0-rc.0 <0.2.2",
+    "@deepseek-ai/schemastery": ">=3.18.4 <4 || >=3.18.5-alpha.0 <4"
   },
   "devDependencies": {
-    "typescript": "~5.7.2",
-    "tsdown": "0.22.2",
+    "@deepseek-ai/cordis": "^4.0.5-alpha.1",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-store": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-credentials": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-launch-environment": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-web": "0.2.1-alpha.2",
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
     "@types/node": "^22.20.0",
     "@types/react": "~18.3.1",
-    "@types/react-dom": "^18.3.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-credentials": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.5",
-    "@deepseek-ai/dsh-web": "^0.1.0-rc.5",
-    "@deepseek-ai/schemastery": "^3.18.1",
+    "@types/react-dom": "~18.3.5",
+    "react": "~18.3.1",
+    "react-dom": "~18.3.1",
+    "tsdown": "0.22.2",
+    "typescript": "~5.7.2",
     "vitest": "^3.2.0"
   }
 }

@@ -1,59 +1,52 @@
 /**
- * dsh-fetch-third-party — host half.
+ * dsh-fetch-search — host half.
  *
- * Registers the `third-party` fetch provider, the settings section, the
- * self-contained `web_fetch_url` tool, and the settings bridge routes.
- * @module dsh-fetch-third-party
+ * Registers the `third-party` fetch provider, the self-contained
+ * `web_fetch_url` tool, and the runtime-state bridge routes (connectivity
+ * test + live fallback chain). Configuration is expressed as volatile Config
+ * fields (dsh ≥ 0.1.7): the Plugins page's bundle-configuration form edits
+ * them live, and every consumer below reads them through one section
+ * snapshotter, so profile edits hot-apply without a plugin restart.
+ * @module dsh-fetch-search
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import { FetchBudget } from './budget.ts'
-import { FetchCache } from './cache.ts'
+import { FetchCache, SearchCache } from './cache.ts'
 import { mountFetchBridge } from './bridge.ts'
 import { LocalStackManager } from './local-stack.ts'
 import { ThirdPartyFetchProvider } from './provider.ts'
-import {
-  Config, DEFAULT_ADAPTER, DEFAULT_BASE_URL, DEFAULT_CACHE_MAX_ENTRIES,
-  DEFAULT_CACHE_TTL_SECONDS, DEFAULT_FALLBACK,
-  DEFAULT_FAILURE_COOLDOWN_SECONDS, DEFAULT_MAX_CONTENT_CHARS, DEFAULT_MAX_FETCHES, DEFAULT_QUOTA_COOLDOWN_SECONDS,
-  DEFAULT_TOOL_NAME, NAMESPACE,
-} from './settings.ts'
+import { ThirdPartySearchProvider } from './search-provider.ts'
+import { resolveSection, type Config } from './settings.ts'
 import { applyWebFetchUrlTool } from './tool.ts'
 
-export const name = 'dsh-fetch-third-party'
+export const name = 'dsh-fetch-search'
+
+// The Loader needs the schema on the entry to validate the raw row config:
+// schemastery fills defaults and wraps `.volatile()` fields into Volatile
+// references (what `apply` reads), so a row without a config block still
+// receives fully-materialized live fields.
+export { Config } from './settings.ts'
+export type { Config as ConfigType, Section } from './settings.ts'
 
 /**
  * Required services: web seam, credentials, tool registry, prompt sections.
- * `webServer` is deliberately NOT required: the settings bridge mounts only
- * where a web server exists (its own ctx.inject waits lazily), so the core
- * fetch capability works in headless/CLI surfaces too.
+ * `webServer` is deliberately NOT required: the runtime-state bridge mounts
+ * only where a web server exists (its own ctx.inject waits lazily), so the
+ * core fetch capability works in headless/CLI surfaces too.
  */
 export const inject = ['web', 'credentials', 'tools', 'systemPrompt'] as const
 
-/** Mount the provider, its section, its tool, and its bridge. */
-export function apply(ctx: Context, config: Config = DEFAULT_CONFIG): void {
-  // The live section: the row config supplies defaults, user edits override.
-  // The loader passes the raw row config (undefined when the row carries no
-  // config block), so fall back to explicit defaults until the settings
-  // section resolves. `current` is a STABLE reader over a mutable `section`
-  // thunk: every consumer (provider, budget, bridge) receives `current` once
-  // and still sees live values after setSource swaps the thunk.
-  const base: Config = config ?? DEFAULT_CONFIG
-  let section: () => Config = () => base
-  const current: () => Config = () => section() ?? base
+/** Mount the provider, its tool, and its runtime-state bridge. */
+export function apply(ctx: Context, config: Config): void {
+  // Live section reader: volatile fields resolve at read time, so every
+  // consumer (provider, budget, cache, stack) receives `current` once and
+  // still sees live values after the user edits the configuration.
+  const current = (): ReturnType<typeof resolveSection> => resolveSection(config)
 
   // Auto-manages the local wrapper (and best-effort the Crawl4AI container)
   // while a loopback custom provider is the primary or fallback.
   const stack = new LocalStackManager(current)
-
-  installSettingsSection(ctx, NAMESPACE, Config, base, {
-    setSource: (source) => { section = source },
-    // The section calls onChange at attach and on every change, which drives
-    // the initial sync (start when the default is a loopback custom provider)
-    // and keeps it in step with later switches.
-    onChange: () => { void stack.sync() },
-  })
 
   const budget = new FetchBudget(() => current().maxFetchesPerSession)
   const cache = new FetchCache(
@@ -62,37 +55,42 @@ export function apply(ctx: Context, config: Config = DEFAULT_CONFIG): void {
   )
   const provider = new ThirdPartyFetchProvider(ctx, current, budget, cache)
   ctx.web.registerFetchProvider(provider)
-  applyWebFetchUrlTool(ctx, current)
-  mountFetchBridge(ctx, current, (url) => provider.testFetch(url), () => provider.chainSnapshot())
+
+  // Search half (opt-in): the same section's search* fields drive it, and it
+  // shares the TTL/LRU policy but keeps its own store — a search result is not
+  // a page body, and a cache key must include the query parameters.
+  const searchCache = new SearchCache(
+    () => current().cacheTtlSeconds * 1000,
+    () => current().cacheMaxEntries,
+  )
+  const searchProvider = new ThirdPartySearchProvider(ctx, current, searchCache)
+
+  // Register only while the capability is enabled. An install that never turns
+  // search on keeps exactly one usable search provider (the bundled
+  // deepseek-official one), so provider selection can never go ambiguous; and
+  // toggling the switch registers/unregisters live, without a remount.
+  let disposeSearch: (() => void) | undefined
+  const syncSearch = (): void => {
+    const enabled = current().searchEnabled
+    if (enabled && disposeSearch === undefined) {
+      disposeSearch = ctx.web.registerSearchProvider(searchProvider)
+    } else if (!enabled && disposeSearch !== undefined) {
+      disposeSearch()
+      disposeSearch = undefined
+    }
+  }
+  syncSearch()
+
+  // The tool re-registers itself when the live `toolName` preference changes.
+  applyWebFetchUrlTool(ctx, config)
+  mountFetchBridge(ctx, (url) => provider.testFetch(url), () => provider.chainSnapshot(), (query) => searchProvider.testSearch(query))
+
+  // Volatile edits arrive as loader events: drive the initial stack sync, keep
+  // it in step with later provider switches, and register/unregister search.
+  // (The tool subscribes the same way inside applyWebFetchUrlTool.)
+  void stack.sync()
+  ctx.on('loader/volatile-update', () => { syncSearch(); void stack.sync() })
 
   // Kill the wrapper child when the plugin unloads (dsh web shuts down).
-  ctx.effect(() => () => stack.shutdown())
-}
-
-/** Explicit defaults for a row without a config block. */
-const DEFAULT_CONFIG: Config = {
-  adapter: DEFAULT_ADAPTER,
-  // No fallback by default: the user picks their own in the card (e.g. Jina
-  // Reader, keyless, as the safety net).
-  fallback: DEFAULT_FALLBACK,
-  // Empty = adapter stock default (firecrawl → api.firecrawl.dev).
-  baseURL: '',
-  // Empty apiKeyEnv: the provider falls back to the adapter's standard ref.
-  apiKeyEnv: '',
-  maxFetchesPerSession: DEFAULT_MAX_FETCHES,
-  // Empty proxy: direct connection unless the card sets one.
-  proxy: '',
-  // Proxy applies when a value is set (the card can toggle it off).
-  proxyEnabled: true,
-  customProviders: [],
-  maxContentChars: DEFAULT_MAX_CONTENT_CHARS,
-  cacheEnabled: true,
-  cacheTtlSeconds: DEFAULT_CACHE_TTL_SECONDS,
-  cacheMaxEntries: DEFAULT_CACHE_MAX_ENTRIES,
-  rejectPrivateTargets: true,
-  toolName: DEFAULT_TOOL_NAME,
-  fallbackChain: [],
-  cooldownEnabled: true,
-  quotaCooldownSeconds: DEFAULT_QUOTA_COOLDOWN_SECONDS,
-  failureCooldownSeconds: DEFAULT_FAILURE_COOLDOWN_SECONDS,
+  ctx.effect(() => () => { disposeSearch?.(); disposeSearch = undefined; stack.shutdown() })
 }

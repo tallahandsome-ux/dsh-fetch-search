@@ -3,7 +3,7 @@
  * evidence the model can cite: title, heading outline, links, word count and
  * estimated reading time. Pure string work — no extra requests, no provider
  * metadata — so it behaves identically across every adapter.
- * @module dsh-fetch-third-party/structure
+ * @module dsh-fetch-search/structure
  */
 
 /** Structured view of a fetched page. */

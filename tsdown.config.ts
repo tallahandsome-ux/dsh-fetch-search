@@ -1,5 +1,5 @@
 /**
- * Standalone tsdown config for dsh-fetch-third-party.
+ * Standalone tsdown config for dsh-fetch-search.
  *
  * Host half: lib/index.js — ESM; every @deepseek-ai/* specifier stays EXTERNAL
  * (explicit list; the package declares no installable deps) so the runtime
@@ -16,7 +16,6 @@ const HOST_EXTERNALS = [
   '@deepseek-ai/cordis',
   '@deepseek-ai/dsh-credentials',
   '@deepseek-ai/dsh-launch-environment',
-  '@deepseek-ai/dsh-settings',
   '@deepseek-ai/dsh-tools',
   '@deepseek-ai/dsh-web',
   '@deepseek-ai/schemastery',
@@ -32,13 +31,11 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-attachment',
   '@deepseek-ai/dsh-client-schema-form',
-  // Documented runtime-store exemption (mirrors the official preset).
-  '@deepseek-ai/dsh-client-runtime/client',
 ]
 
 export default defineConfig([
   {
-    name: 'dsh-fetch-third-party',
+    name: 'dsh-fetch-search',
     entry: ['src/index.ts'],
     outDir: 'lib',
     format: ['esm'],
@@ -50,7 +47,7 @@ export default defineConfig([
     deps: { neverBundle: HOST_EXTERNALS },
   },
   {
-    name: 'dsh-fetch-third-party/client',
+    name: 'dsh-fetch-search/client',
     entry: { client: 'src/client/index.ts' },
     outDir: 'lib',
     format: 'cjs',
@@ -69,7 +66,7 @@ export default defineConfig([
     },
     outputOptions: {
       entryFileNames: 'client.js',
-      banner: 'window.__ModuleLoader__.load({ id: "dsh-fetch-third-party", factory: (require) => {',
+      banner: 'window.__ModuleLoader__.load({ id: "dsh-fetch-search", factory: (require) => {',
       footer: 'return module.exports; } });',
       intro: 'var module = { exports: {} }; var exports = module.exports;',
     },

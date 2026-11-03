@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Standalone Tavily key verification for dsh-fetch-third-party acceptance.
+ * Standalone Tavily key verification for dsh-fetch-search acceptance.
  *
  * Usage (from the fetch project root):
  *   $env:TAVILY_API_KEY="tvly-..." ; node scripts/verify-tavily.mjs

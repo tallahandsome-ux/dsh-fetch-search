@@ -1,4 +1,4 @@
-# dsh-fetch-third-party
+# dsh-fetch-search
 
 [English](README.en.md) | 中文
 
@@ -22,16 +22,31 @@
 - **动态回退链**：有序服务商链 + 配额/失败冷却（指数退避），失败自动降级、到期自动恢复，不再只是「主+兜底」两档。
 - **结构化输出**：`web_fetch_url` 除正文外返回标题/标题大纲/链接/字数/预计阅读时长，方便模型引用与核对。
 
+## 搜索能力（SearXNG，2.0 起）
+
+抓取之外的第二个能力：把 `ctx.web` 的搜索 provider 换成**自建 SearXNG**，替代按次计费的官方联网搜索。模型侧仍然是原来的 `web_search` 工具，参数、结果卡片、引用格式都不变。
+
+- **注册为 `third-party`**：`searchEnabled` 打开后才注册，未开启时与 1.x 行为完全一致（不会因为多一个可用 provider 触发 `WEB_PROVIDER_AMBIGUOUS`）。
+- **钉死选择**：profile 的 `web` 行必须是 `searchProvider: third-party`（patch 是整行替换，需同时保留 `fetchProvider`）。
+- **远程 / 带鉴权实例**：`searchBaseURL` 填远端地址，`searchApiKeyEnv` + `searchAuthHeader` + `searchAuthPrefix` 组合出鉴权头（如 `Authorization: Bearer xxx`、`X-API-Key: xxx`）；三段留空即匿名（本地 Docker 默认）。
+- **不消耗抓取预算**：自建实例零边际成本，搜索不占 `maxFetchesPerSession`；结果缓存与抓取共用 TTL/LRU 策略但独立存储，缓存键含 query/语言/分类/安全级别/条数。
+- **不套 SSRF 校验**：搜索端点是运维自选（通常是 loopback），`assertPublicHttpURL` 会把 `127.0.0.1` 直接拒掉；模型请求的抓取目标仍走原防护。
+- **诊断到位**：403 提示 `search.formats` 未含 `json`；429 提示 limiter；全部引擎无响应时把 `unresponsive_engines` 原样带进错误。
+- **超时 20s**：SearXNG 引擎各 3s 并行聚合，但冷实例首查实测可达 18.5s，默认值据此设定。
+
+SearXNG 侧的两项前置条件（漏配就会「装了却搜不出」）见 [docs/search-searxng.md](docs/search-searxng.md)。
+
 ## 工作原理
 
 ```
 用户提问
-  → 模型调用 web_search（官方搜索）
-    → 摘要足够？ → 是 → 直接回答
-    → 否 → 模型自主调用 web_fetch_url({ url })
-      → ctx.web.fetch → third-party provider
-        → 第三方服务（Tavily / Jina / Firecrawl / 自定义）抓取目标网页
-        → 返回正文 → 模型基于全文回答
+  → 模型调用 web_search
+    → ctx.web.search → 配置的搜索 provider（本插件 third-party / SearXNG，或官方 deepseek-official）
+      → 摘要足够？ → 是 → 直接回答
+      → 否 → 模型自主调用 web_fetch_url({ url })
+        → ctx.web.fetch / 本插件 third-party provider
+          → 第三方服务（Tavily / Jina / Firecrawl / 自定义）抓取目标网页
+          → 返回正文 → 模型基于全文回答
 ```
 
 ## 目录结构
@@ -50,6 +65,12 @@ fetch/
 
 前置：已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）与 pnpm。
 
+> **版本要求**：本插件 v1.1.0 起适配 dsh 的 volatile 配置体系（0.1.7 引入）与官方设置/插件页插槽，要求 **dsh ≥ 0.2.0-rc.0 且 < 0.2.2**（已实测 0.2.0-rc.2 与 0.2.1-alpha.2）。旧版 dsh（0.1.x）请使用 v1.0.0。
+>
+> **配置入口**：设置 → **dsh-fetch-search**（独立设置页，卡片默认展开；`settings.section` 插槽）。插件详情页（「插件」面板 → 已安装插件 → dsh-fetch-search）也保留同一张配置卡片。所有字段即时保存、经 volatile HMR 热生效，无需重启会话。
+>
+> **DSH Desktop 用户**：桌面版的 `desktop` profile 由 Electron 应用独占管理，命令行 `dsh plugin --profile desktop` 会被拒绝；请在桌面应用内操作——「插件」面板 → 添加插件 → 本地路径安装（`file:D:\...\dsh-fetch-search`）。
+
 ### 方式一：git 安装（推荐）
 
 ```powershell
@@ -61,10 +82,10 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 > ```yaml
 > # %USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml
 > allowBuilds:
->   "dsh-fetch-third-party@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
+>   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
 > ```
 
-安装完成后**重启 `dsh web`**；在 设置 → 插件 → 插件配置 中出现「网页抓取（第三方）」卡片即安装成功。
+安装完成后**重启 `dsh web`**；在 「插件」面板 → 已安装插件 中出现「dsh-fetch-search」卡片即安装成功。
 
 ### 方式二：本地构建后安装
 
@@ -74,16 +95,16 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 
 ```powershell
 git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
-cd dsh-fetch-third-party
+cd dsh-fetch-search
 pnpm install
 pnpm build
-dsh plugin --profile web add file:D:\你的目录\dsh-fetch-third-party
+dsh plugin --profile web add file:D:\你的目录\dsh-fetch-search
 ```
 
-把 `D:\你的目录\dsh-fetch-third-party` 换成你机器上**实际克隆到的目录**。例如克隆到了 `D:\plugins` 下，就填：
+把 `D:\你的目录\dsh-fetch-search` 换成你机器上**实际克隆到的目录**。例如克隆到了 `D:\plugins` 下，就填：
 
 ```powershell
-dsh plugin --profile web add file:D:\plugins\dsh-fetch-third-party
+dsh plugin --profile web add file:D:\plugins\dsh-fetch-search
 ```
 
 判断标准：该路径下应直接看到 `package.json`、`src/`、`tsdown.config.ts`、`scripts/` 等文件；`Test-Path` 能通过且能看到 `package.json` 即正确。若路径填错（不存在/填成文件），`dsh plugin add` 会失败或装不上。
@@ -93,9 +114,16 @@ dsh plugin --profile web add file:D:\plugins\dsh-fetch-third-party
 ### 验证安装
 
 1. 重启 `dsh web`，浏览器 Ctrl+F5 强制刷新。
-2. 设置 → 插件 → 插件配置 →「网页抓取（第三方）」卡片。
+2. 设置 → **dsh-fetch-search**：独立配置页默认展开；或「插件」面板 → 已安装插件 → dsh-fetch-search → 详情页。
 3. 选择服务商（如 Jina Reader，免 key），点「测试连接」→ 应显示成功。
 4. 新建会话，模型即可通过 `web_fetch_url` 工具抓取网页全文。
+
+### 配置如何保存与热生效（dsh ≥ 0.1.7 机制）
+
+- 插件 `Config` schema 的全部字段都标了 `.volatile()`：Plugins 页的配置表单通过官方 settings Remote 读写，改动持久化进 profile 的 `cordis.patch.yml`，并经 volatile HMR **热生效**（provider 的服务商、预算、缓存、回退链全部即时跟随，无需重启插件）。
+- 工具名（`toolName`）变化时插件自动重新注册工具；`web_fetch` 被占用时回退 `web_fetch_url`。
+- API key 仍只走 credentials Remote（`remote.credentials.set/unset/describe`），不经过任何插件自有路由。
+- 插件自有的 HTTP 桥接路由只剩两条**运行时状态**路由：`POST /api/fetch-third-party/test`（真实试连）与 `GET /api/fetch-third-party/chain`（回退链实时冷却状态）——配置与密钥都已收编进官方通道，旧的 apiproxy allowlist 限制在 0.1.2 后已不存在。
 
 ## API Key 安全（必读）
 
@@ -115,7 +143,7 @@ dsh plugin --profile web add file:D:\plugins\dsh-fetch-third-party
 
 ### 服务商切换
 
-设置 → 插件 → 插件配置 → **网页抓取（第三方）** 卡片：
+「插件」面板 → 插件详情页，或设置 → **dsh-fetch-search** → **网页抓取（第三方）** 卡片：
 
 1. **服务商**下拉：`Tavily` / `Jina Reader` / `Firecrawl` / 自定义服务商
 2. **API Key**：写入托管保险箱（0600），只显示“已配置/未配置”；Jina 可留空（匿名可用），Tavily / Firecrawl 建议配置
@@ -142,19 +170,28 @@ http://127.0.0.1:27822
 - **工具命名**（配置文件 `toolName`，不进卡片）：`web_fetch_url`（默认）/ `web_fetch` / `auto`。选择官方名 `web_fetch` 时若已被占用会自动回退到 `web_fetch_url`。
 - **回退链**（卡片二级「回退链」）：逗号分隔的有序服务商名（留空=主服务商+兜底）；失败/配额耗尽的自动冷却降级（配额 3600s / 普通失败 60s 起指数退避），到期自动恢复；下方实时显示链顺序与冷却状态。
 - **结构化输出**：`web_fetch_url` 返回 `{ url, statusCode, content, title?, headings[], links[], wordCount, readingTimeSec }`。
-### 自建抓取工具（Crawl4AI，零 API key）
+### 自建抓取工具（Crawl4AI）
 
-不想依赖商业服务商时，可用自建 **Crawl4AI**（Docker）+ 契约 v1 包装，接入**自定义服务商**——无需 API key，本机仍是“快递员模式”。
+不想依赖商业服务商时，用自建 **Crawl4AI**（Docker）作为**自定义服务商**——本机仍是“快递员模式”。v1.3.0 起有两条接入路径：
 
-**自动管理（插件内置，无需命令）**：启动 `dsh web` 后，只要「默认服务商」或「兜底服务商」是 loopback 地址的自定义服务商（如 `crawl4ai` → `http://127.0.0.1:8787`），插件会自动拉起包装进程，并尽力确保 Crawl4AI 容器在运行。前提：**Docker Desktop 已启动**（建议设为开机自启）且镜像已拉取。
+**方式一：原生适配器直连（推荐）**。插件内置 `crawl4ai` 适配器，直接说 Crawl4AI 0.9+ 的原生 `/md` 协议（`POST {地址}/md`，Bearer Token），**不需要任何包装进程**。前提：你的容器已在跑（默认发布端口 `127.0.0.1:11235`，启动时带 `-e CRAWL4AI_API_TOKEN=<token>`）：
 
-手动兜底 / 首次拉取镜像：
+```powershell
+docker run -d -p 127.0.0.1:11235:11235 --name crawl4ai --shm-size=1g `
+  -e CRAWL4AI_API_TOKEN=<你的token> unclecode/crawl4ai:latest
+```
+
+卡片接入：设置 → dsh-fetch-search → **自定义服务商** → 添加 → 名称 `crawl4ai` / 类型 **`crawl4ai（自建容器）`**（接口地址自动预填 `http://127.0.0.1:11235`，可改）→ 保存 → 「默认服务商」下拉选它。API Key 引用默认 `CRAWL4AI_API_KEY`（条目留空即回退该标准引用），把 token 写进卡片 Key 框即入保险箱。
+
+> **输入框快捷开关**：v1.4.0 起，会话输入框工具行（「访问模式」旁）有一个「抓取代理·开/关」快捷开关，一键切换本地 VPN 代理，与设置页的「本地代理」复选框实时同步，无需打开设置。
+
+> **看门狗**：只要路由里引用着回环 11235 端口的 crawl4ai 条目（主/兜底/回退链均可），插件每 20 秒检查容器存活，挂了自动 `docker start` 拉起（Docker 不可用时退避重试），无需手动干预；非标准端口或远程地址的条目不接管。
+
+**方式二：内置自动管理（wrapper 栈）**。类型选 `custom（契约 v1）` + loopback 地址（`http://127.0.0.1:8787`）时，插件自动拉起契约包装进程并尽力确保 Crawl4AI 容器在运行（watchdog 自愈）。前提：**Docker Desktop 已启动**（建议开机自启）且镜像已拉取。手动兜底 / 首次拉取镜像：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start-crawl4ai.ps1
 ```
-
-卡片注册：**自定义服务商** → 名称 `crawl4ai` / 类型 `custom（契约 v1）` / 接口地址 `http://127.0.0.1:8787` → 保存 → 「默认服务商」下拉选它。
 
 > 契约 v1 对接标准见 [docs/contract.md](docs/contract.md)；选型与验证记录见 [docs/custom-crawler-research.md](docs/custom-crawler-research.md)。
 
@@ -170,7 +207,7 @@ node scripts/verify-firecrawl.mjs         # 需 FIRECRAWL_API_KEY
 
 ```bash
 git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
-cd dsh-fetch-third-party
+cd dsh-fetch-search
 pnpm install        # 安装构建工具 + 类型依赖（@deepseek-ai/* 以 peer/dev 声明，均来自 npm）
 pnpm build          # tsdown 双产物 → lib/index.js（Host）+ lib/client.js（浏览器卡片）
 pnpm typecheck      # tsc --noEmit
@@ -184,7 +221,7 @@ pnpm test           # vitest（settings 解析 / budget 预算 / B1 回归）
 
 ### 本插件原创（MIT）
 
-- `dsh-fetch-third-party` 插件本体：提供方注册、主+兜底路由、会话预算、设置桥接、GUI 卡片、契约 v1 自定义服务适配器、本地栈自动管理（`local-stack` + watchdog）
+- `dsh-fetch-search` 插件本体：提供方注册、主+兜底路由、会话预算、设置桥接、GUI 卡片、契约 v1 自定义服务适配器、本地栈自动管理（`local-stack` + watchdog）
 - **抓取契约 v1**：自定义抓取服务的对接标准（见 [docs/contract.md](docs/contract.md)）
 
 ### 使用/依赖的第三方项目

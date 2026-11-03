@@ -11,7 +11,7 @@
  * The plugin's built-in `custom` adapter (src/adapters/custom.ts) already
  * speaks this contract, so registering this wrapper as a custom provider in the
  * card (type = custom, address = http://127.0.0.1:<port>) makes Crawl4AI a
- * first-class "courier" for dsh-fetch-third-party — no plugin code changes.
+ * first-class "courier" for dsh-fetch-search — no plugin code changes.
  *
  * Uses Crawl4AI's purpose-built POST /md endpoint (Readability "fit" filter by
  * default) rather than the full async /crawl/job pipeline: one synchronous call

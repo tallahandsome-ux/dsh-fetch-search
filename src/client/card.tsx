@@ -1,49 +1,24 @@
 /**
- * The web-fetch settings card (P4 complete version).
+ * The web-fetch configuration card (browser half).
  *
- * Self-contained: manages its own state and talks to the host bridge
- * (`/api/fetch-third-party/*`) — no dependency on the official settings
- * scope (blocked for third-party namespaces) or the connection client.
+ * Data layer: configuration values and writes ride the Plugins page's
+ * configuration form (host-owned settings Remote, hot-applied); the API key
+ * rides the credentials Remote; only the connectivity test and the live
+ * fallback-chain view talk to the plugin's own runtime-state bridge
+ * (`/api/fetch-third-party/{test,chain}`).
  *
  * Layout: header (collapse) → level 1 (provider + proxy + test) → level 2
  * (endpoint + cap + API key + fallback) → custom providers editor.
- * @module dsh-fetch-third-party/client/card
+ * @module dsh-fetch-search/client/card
  */
 
 import { useEffect, useState } from 'react'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-
-/** One user-registered custom provider (mirror of the host type). */
-interface CustomProvider {
-  name: string
-  adapter: string
-  baseURL: string
-  apiKeyEnv: string
-}
-
-/** The card's view of the section plus the key's credential state. */
-interface ConfigView {
-  adapter: string
-  fallback: string
-  baseURL: string
-  apiKeyEnv: string
-  maxFetchesPerSession: number
-  maxContentChars: number
-  proxy: string
-  proxyEnabled: boolean
-  customProviders: CustomProvider[]
-  cacheEnabled: boolean
-  cacheTtlSeconds: number
-  cacheMaxEntries: number
-  rejectPrivateTargets: boolean
-  fallbackChain: string[]
-  cooldownEnabled: boolean
-  quotaCooldownSeconds: number
-  failureCooldownSeconds: number
-  writable: boolean
-  apiKeyConfigured: boolean
-  apiKeyWritable: boolean
-}
+// Type-only: the Plugins page's SlotMap merge ('plugins.bundle.config', for PropsRuntime).
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+// Type-only: the settings shell's SlotMap merge ('settings.section', for PropsRuntime).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { FetchCardFace, FetchCardState, SectionValues } from './card-controller.ts'
 
 /** One row of the live fallback chain. */
 interface ChainRow {
@@ -62,14 +37,48 @@ interface TestResult {
   error?: string
 }
 
-/** Props bound by the slot renderer: the registered locale namespace's `t`. */
-export type FetchCardProps = PropsLocale<'fetch-third-party'>
+/** Result of the search test (`/search-test`). */
+interface SearchTestResult {
+  ok: boolean
+  servedBy: string
+  count: number
+  top: { title?: string; url: string }[]
+  durationMs: number
+  error?: string
+}
 
-const CONFIG_URL = '/api/fetch-third-party/config'
-const KEY_URL = '/api/fetch-third-party/key'
+/** The card's editable mirror of the section values plus the key's credential state. */
+interface CardView extends SectionValues {
+  apiKeyConfigured: boolean
+  apiKeyWritable: boolean
+}
+
+/** Props bound by the Plugins page's bundle-configuration seat. */
+export type FetchCardProps =
+  PropsRuntime<'plugins.bundle.config'>
+  & PropsLocale<'fetch-third-party'>
+  & InjectFace<FetchCardFace>
+
+/** Props bound by the settings shell for this plugin's Settings section page. */
+export type FetchSettingsSectionProps =
+  PropsRuntime<'settings.section'>
+  & PropsLocale<'fetch-third-party'>
+  & InjectFace<FetchCardFace>
+
+/** The shared body: locale copy, the controller face, and the initial fold. */
+type FetchSurfaceProps = PropsLocale<'fetch-third-party'> & InjectFace<FetchCardFace> & {
+  /** Start expanded (the Settings section page) instead of collapsed (the bundle seat). */
+  defaultOpen?: boolean
+}
+
 const TEST_URL = '/api/fetch-third-party/test'
-const CUSTOM_URL = '/api/fetch-third-party/custom'
 const CHAIN_URL = '/api/fetch-third-party/chain'
+const SEARCH_TEST_URL = '/api/fetch-third-party/search-test'
+
+/** Search adapters this build ships (one today). */
+const SEARCH_ADAPTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'searxng', label: 'SearXNG（自建）' },
+]
 
 /** The built-in service-provider options (custom names are appended). */
 const ADAPTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
@@ -81,6 +90,7 @@ const ADAPTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
 /** The adapter choices a custom provider row may pick. */
 const CUSTOM_ADAPTER_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'custom', label: 'custom（契约 v1）' },
+  { id: 'crawl4ai', label: 'crawl4ai（自建容器）' },
   { id: 'jina', label: 'jina（复用）' },
   { id: 'tavily', label: 'tavily（复用）' },
   { id: 'firecrawl', label: 'firecrawl（复用）' },
@@ -101,6 +111,12 @@ const KEY_ENV_BY_ADAPTER: Record<string, string> = {
   firecrawl: 'FIRECRAWL_API_KEY',
 }
 
+/** Standard credential reference for a self-hosted Crawl4AI custom entry. */
+const CRAWL4AI_API_KEY_ENV = 'CRAWL4AI_API_KEY'
+
+/** Default endpoint of a self-hosted Crawl4AI Docker API server. */
+const CRAWL4AI_DEFAULT_BASE_URL = 'http://127.0.0.1:11235'
+
 /** Standard endpoint each built-in adapter defaults to (card-side mirror). */
 const BASE_URL_BY_ADAPTER: Record<string, string> = {
   tavily: 'https://api.tavily.com',
@@ -108,39 +124,62 @@ const BASE_URL_BY_ADAPTER: Record<string, string> = {
   firecrawl: 'https://api.firecrawl.dev',
 }
 
-/** Render the fetch settings card. */
+/** Fold the controller snapshot into the card's editable view. */
+function viewOf(state: FetchCardState): CardView {
+  return {
+    ...state.values,
+    apiKeyConfigured: state.apiKeyConfigured,
+    apiKeyWritable: state.apiKeyWritable,
+  }
+}
+
+/** Render the fetch configuration card on the bundle's Plugins-page seat (collapsed by default). */
 export function FetchCard(props: FetchCardProps) {
+  return <FetchSurface {...props} />
+}
+
+/** Render the fetch configuration page inside Settings → dsh-fetch-search (expanded by default). */
+export function FetchSettingsSection(props: FetchSettingsSectionProps) {
+  return <FetchSurface {...props} defaultOpen />
+}
+
+/** Render the fetch configuration surface. */
+function FetchSurface(props: FetchSurfaceProps) {
   const { t } = props
-  const [view, setView] = useState<ConfigView | null>(null)
+  const state = props.useFetchCard(snapshot => snapshot)
+  const [view, setView] = useState<CardView | null>(() => state.status === 'ready' ? viewOf(state) : null)
   const [keyInput, setKeyInput] = useState('')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
-  // Default-collapsed: the card is a rarely-used advanced section; users
-  // expand it on demand (level 2 stays expanded so one click reveals the
-  // primary provider + endpoint + cap + key + fallback controls together).
-  const [open, setOpen] = useState(false)
+  // Collapsed on the Plugins-page bundle seat (a rarely-used advanced
+  // section users expand on demand); expanded on the Settings page (the user
+  // navigated here on purpose). Level 2 stays expanded so one click reveals
+  // the primary provider + endpoint + cap + key + fallback controls together.
+  const [open, setOpen] = useState(props.defaultOpen === true)
   const [l2Open, setL2Open] = useState(true)
   const [testUrl, setTestUrl] = useState('https://example.com')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [customsOpen, setCustomsOpen] = useState(false)
-  const [customs, setCustoms] = useState<CustomProvider[]>([])
+  const [customs, setCustoms] = useState(state.values.customProviders)
   const [chainRows, setChainRows] = useState<ChainRow[]>([])
+  const [searchOpen, setSearchOpen] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('searxng test')
+  const [searching, setSearching] = useState(false)
+  const [searchResult, setSearchResult] = useState<SearchTestResult | null>(null)
 
-  const load = async (): Promise<void> => {
-    try {
-      const res = await fetch(CONFIG_URL)
-      if (res.ok) {
-        const next = await res.json() as ConfigView
-        setView(next)
-        setCustoms(next.customProviders)
-      }
-    } catch {
-      // Keep the last known view; the card stays usable for retries.
-    }
-  }
+  // The Host form pushes authoritative values after every write (and after
+  // edits made on other surfaces); re-mirror them into the local editable
+  // view. In-flight local edits are re-applied on blur, so this reset cannot
+  // lose typed input — it shows the same characters the write carried.
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    setView(viewOf(state))
+    setCustoms(state.values.customProviders)
+  }, [state])
 
-  useEffect(() => { void load() }, [])
+  // The effective credential reference shown under the key control.
+  const apiKeyEnv = state.status === 'ready' ? state.apiKeyEnv : ''
 
   const loadChain = async (): Promise<void> => {
     try {
@@ -156,49 +195,23 @@ export function FetchCard(props: FetchCardProps) {
 
   useEffect(() => { void loadChain() }, [])
 
-  const saveField = async (field: string, value: unknown): Promise<void> => {
+  const saveField = async (field: keyof SectionValues, value: SectionValues[keyof SectionValues]): Promise<void> => {
     setSaving(true)
     setMessage('')
-    try {
-      const res = await fetch(CONFIG_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ field, value }),
-      })
-      if (res.ok) {
-        const next = await res.json() as ConfigView
-        setView(next)
-        setCustoms(next.customProviders)
-        setMessage(t('saveSuccess'))
-      } else {
-        setMessage(t('saveFailed'))
-      }
-    } catch {
-      setMessage(t('saveFailed'))
-    } finally {
-      setSaving(false)
-    }
+    const ok = await props.saveField(field, value)
+    setMessage(ok ? t('saveSuccess') : t('saveFailed'))
+    setSaving(false)
   }
 
   const saveKey = async (value: string): Promise<void> => {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch(KEY_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ value }),
-      })
-      if (res.ok) {
-        const body = await res.json() as ConfigView
-        setKeyInput('')
-        setView(body)
-        setMessage(t('saveSuccess'))
-      } else {
-        setMessage(t('saveFailed'))
-      }
-    } catch {
-      setMessage(t('saveFailed'))
+      await props.writeKey(value)
+      setKeyInput('')
+      setMessage(t('saveSuccess'))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -208,21 +221,11 @@ export function FetchCard(props: FetchCardProps) {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch(KEY_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ unset: true }),
-      })
-      if (res.ok) {
-        const body = await res.json() as ConfigView
-        setKeyInput('')
-        setView(body)
-        setMessage(t('saveSuccess'))
-      } else {
-        setMessage(t('saveFailed'))
-      }
-    } catch {
-      setMessage(t('saveFailed'))
+      await props.clearKey()
+      setKeyInput('')
+      setMessage(t('saveSuccess'))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -250,38 +253,51 @@ export function FetchCard(props: FetchCardProps) {
     }
   }
 
+  const runSearchTest = async (): Promise<void> => {
+    setSearching(true)
+    setSearchResult(null)
+    try {
+      const res = await fetch(SEARCH_TEST_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery }),
+      })
+      if (res.ok) {
+        setSearchResult(await res.json() as SearchTestResult)
+      } else {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        setSearchResult({ ok: false, servedBy: '', count: 0, top: [], durationMs: 0, error: body?.error ?? res.status.toString() })
+      }
+    } catch (error) {
+      setSearchResult({ ok: false, servedBy: '', count: 0, top: [], durationMs: 0, error: String(error) })
+    } finally {
+      setSearching(false)
+    }
+  }
+
   const saveCustoms = async (): Promise<void> => {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch(CUSTOM_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ op: 'replace', entries: customs }),
-      })
-      if (res.ok) {
-        const next = await res.json() as ConfigView
-        setView(next)
-        setCustoms(next.customProviders)
-        setMessage(t('saveSuccess'))
-      } else {
-        const body = await res.json().catch(() => null) as { error?: string } | null
-        setMessage(body?.error ?? t('saveFailed'))
-      }
-    } catch {
-      setMessage(t('saveFailed'))
+      const ok = await props.saveCustoms(customs)
+      setMessage(ok ? t('saveSuccess') : t('saveFailed'))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('saveFailed'))
     } finally {
       setSaving(false)
     }
   }
 
+  if (state.status === 'unavailable') {
+    return <p style={{ padding: '12px 16px', color: '#888' }}>{t('unavailable')}</p>
+  }
   if (view === null) {
     return <p style={{ padding: '12px 16px', color: '#888' }}>{t('loading')}</p>
   }
 
-  const disabled = !view.writable || saving
+  const disabled = !state.writable || saving
 
-  const updateCustom = (index: number, patch: Partial<CustomProvider>): void => {
+  const updateCustom = (index: number, patch: Partial<typeof customs[number]>): void => {
     setCustoms(prev => prev.map((entry, i) => i === index ? { ...entry, ...patch } : entry))
   }
 
@@ -307,8 +323,10 @@ export function FetchCard(props: FetchCardProps) {
   /** The custom entry backing the primary (when isCustomPrimary), for endpoint edits. */
   const customEntry = view.customProviders.find(entry => entry.name === view.adapter)
 
-  /** The endpoint shown/edited in the 接口地址 field. */
-  const displayBaseURL = isCustomPrimary ? (customEntry?.baseURL ?? '') : view.baseURL
+  /** The endpoint shown in the 接口地址 field: the effective one (empty flat = stock default). */
+  const displayBaseURL = isCustomPrimary
+    ? (customEntry?.baseURL ?? '')
+    : (view.baseURL.length > 0 ? view.baseURL : BASE_URL_BY_ADAPTER[view.adapter] ?? '')
 
   /** Save the 接口地址 field: custom primaries update their own entry, built-ins the flat baseURL. */
   const saveBaseURL = async (value: string): Promise<void> => {
@@ -318,22 +336,12 @@ export function FetchCard(props: FetchCardProps) {
     setSaving(true)
     setMessage('')
     try {
-      const res = await fetch(CUSTOM_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ op: 'update', entry: { ...entry, baseURL: value } }),
-      })
-      if (res.ok) {
-        const next = await res.json() as ConfigView
-        setView(next)
-        setCustoms(next.customProviders)
-        setMessage(t('saveSuccess'))
-      } else {
-        const body = await res.json().catch(() => null) as { error?: string } | null
-        setMessage(body?.error ?? t('saveFailed'))
-      }
-    } catch {
-      setMessage(t('saveFailed'))
+      const next = customs.map(provider => provider.name === entry.name ? { ...provider, baseURL: value } : provider)
+      setCustoms(next)
+      const ok = await props.saveCustoms(next)
+      setMessage(ok ? t('saveSuccess') : t('saveFailed'))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : t('saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -408,7 +416,7 @@ export function FetchCard(props: FetchCardProps) {
                   // Built-ins auto-align key ref + endpoint; custom names
                   // carry their own from the custom table.
                   const keyEnv = KEY_ENV_BY_ADAPTER[next]
-                  if (keyEnv !== undefined && view.apiKeyEnv !== keyEnv) {
+                  if (keyEnv !== undefined && view.apiKeyEnv !== keyEnv && !isCustomName(next, view.customProviders)) {
                     void saveField('apiKeyEnv', keyEnv)
                   }
                   // Align the flat endpoint to the new built-in's default when the
@@ -658,7 +666,7 @@ export function FetchCard(props: FetchCardProps) {
                   )}
                 </div>
                 <p style={styles.hint}>
-                  {t('keyRefHint')} {view.apiKeyEnv} · {t('apiKeyHint')}
+                  {t('keyRefHint')} {apiKeyEnv} · {t('apiKeyHint')}
                 </p>
               </label>
 
@@ -709,7 +717,15 @@ export function FetchCard(props: FetchCardProps) {
                       style={{ ...styles.input, ...styles.inline }}
                       value={entry.adapter}
                       disabled={disabled}
-                      onChange={(event) => updateCustom(index, { adapter: event.target.value })}
+                      onChange={(event) => {
+                        const adapter = event.target.value
+                        // A fresh crawl4ai row starts from the Docker API
+                        // server's default published port; anything else keeps
+                        // the user's endpoint as typed.
+                        updateCustom(index, adapter === 'crawl4ai' && entry.baseURL.length === 0
+                          ? { adapter, baseURL: CRAWL4AI_DEFAULT_BASE_URL }
+                          : { adapter })
+                      }}
                     >
                       {CUSTOM_ADAPTER_OPTIONS.map(option => (
                         <option key={option.id} value={option.id}>{option.label}</option>
@@ -750,9 +766,197 @@ export function FetchCard(props: FetchCardProps) {
             </div>
           )}
 
+          {/* ── 搜索（SearXNG） ── */}
+          <button style={styles.section} onClick={() => setSearchOpen(prev => !prev)} aria-expanded={searchOpen}>
+            <span style={styles.sectionLabel}>{t('searchSection')}</span>
+            <span style={styles.chevron}>{searchOpen ? '▾' : '▸'}</span>
+          </button>
+          {searchOpen && (
+            <div style={styles.sectionBody}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={view.searchEnabled}
+                  disabled={disabled}
+                  onChange={(event) => void saveField('searchEnabled', event.target.checked)}
+                />
+                <span style={styles.label}>{t('searchEnable')}</span>
+              </div>
+              <p style={styles.hint}>{t('searchEnableHint')}</p>
+              <p style={styles.warn}>{t('searchPinHint')}</p>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchAdapter')}</span>
+                <select
+                  style={styles.input}
+                  value={view.searchAdapter}
+                  disabled={disabled}
+                  onChange={(event) => void saveField('searchAdapter', event.target.value)}
+                >
+                  {SEARCH_ADAPTER_OPTIONS.map(option => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchBaseUrl')}</span>
+                <input
+                  style={styles.input}
+                  value={view.searchBaseURL}
+                  disabled={disabled}
+                  placeholder="http://127.0.0.1:8888"
+                  onChange={(event) => setView(prev => prev ? { ...prev, searchBaseURL: event.target.value } : prev)}
+                  onBlur={(event) => void saveField('searchBaseURL', event.target.value)}
+                />
+                <p style={styles.hint}>{t('searchBaseUrlHint')}</p>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchLanguage')}</span>
+                <input
+                  style={styles.input}
+                  value={view.searchLanguage}
+                  disabled={disabled}
+                  placeholder="zh-CN"
+                  onChange={(event) => setView(prev => prev ? { ...prev, searchLanguage: event.target.value } : prev)}
+                  onBlur={(event) => void saveField('searchLanguage', event.target.value)}
+                />
+                <p style={styles.hint}>{t('searchLanguageHint')}</p>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchCategories')}</span>
+                <input
+                  style={styles.input}
+                  value={view.searchCategories}
+                  disabled={disabled}
+                  placeholder="general"
+                  onChange={(event) => setView(prev => prev ? { ...prev, searchCategories: event.target.value } : prev)}
+                  onBlur={(event) => void saveField('searchCategories', event.target.value)}
+                />
+                <p style={styles.hint}>{t('searchCategoriesHint')}</p>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchSafesearch')}</span>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min={0}
+                  max={2}
+                  value={view.searchSafesearch}
+                  disabled={disabled}
+                  onBlur={(event) => void saveField('searchSafesearch', Number(event.target.value))}
+                />
+                <p style={styles.hint}>{t('searchSafesearchHint')}</p>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchTimeout')}</span>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min={1}
+                  value={view.searchTimeoutSeconds}
+                  disabled={disabled}
+                  onBlur={(event) => void saveField('searchTimeoutSeconds', Number(event.target.value))}
+                />
+                <p style={styles.hint}>{t('searchTimeoutHint')}</p>
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchMaxResults')}</span>
+                <input
+                  style={styles.input}
+                  type="number"
+                  min={1}
+                  value={view.searchMaxResults}
+                  disabled={disabled}
+                  onBlur={(event) => void saveField('searchMaxResults', Number(event.target.value))}
+                />
+              </label>
+
+              <label style={styles.field}>
+                <span style={styles.label}>{t('searchKeyRef')}</span>
+                <input
+                  style={styles.input}
+                  value={view.searchApiKeyEnv}
+                  disabled={disabled}
+                  placeholder="SEARXNG_AUTH_KEY（留空=匿名）"
+                  onChange={(event) => setView(prev => prev ? { ...prev, searchApiKeyEnv: event.target.value } : prev)}
+                  onBlur={(event) => void saveField('searchApiKeyEnv', event.target.value)}
+                />
+              </label>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label style={{ ...styles.field, flex: 1 }}>
+                  <span style={styles.label}>{t('searchAuthHeader')}</span>
+                  <input
+                    style={styles.input}
+                    value={view.searchAuthHeader}
+                    disabled={disabled}
+                    onChange={(event) => setView(prev => prev ? { ...prev, searchAuthHeader: event.target.value } : prev)}
+                    onBlur={(event) => void saveField('searchAuthHeader', event.target.value)}
+                  />
+                </label>
+                <label style={{ ...styles.field, flex: 1 }}>
+                  <span style={styles.label}>{t('searchAuthPrefix')}</span>
+                  <input
+                    style={styles.input}
+                    value={view.searchAuthPrefix}
+                    disabled={disabled}
+                    onChange={(event) => setView(prev => prev ? { ...prev, searchAuthPrefix: event.target.value } : prev)}
+                    onBlur={(event) => void saveField('searchAuthPrefix', event.target.value)}
+                  />
+                </label>
+              </div>
+              <p style={styles.hint}>{t('searchAuthHint')}</p>
+
+              {/* 测试搜索 */}
+              <div style={styles.field}>
+                <span style={styles.label}>{t('searchTestQuery')}</span>
+                <input
+                  style={styles.input}
+                  value={searchQuery}
+                  disabled={searching}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                <button
+                  style={styles.button}
+                  disabled={disabled || searching}
+                  onClick={() => void runSearchTest()}
+                >
+                  {searching ? t('searchTesting') : t('searchTestRun')}
+                </button>
+                <p style={styles.hint}>{t('searchTestHint')}</p>
+                {searchResult !== null && (
+                  <div style={{ fontSize: 12, lineHeight: 1.7, color: searchResult.ok ? '#1a7f37' : '#b42318' }}>
+                    <div>
+                      {searchResult.ok
+                        ? `${t('searchResultOk')} ${searchResult.servedBy} · ${searchResult.count} · ${searchResult.durationMs}ms`
+                        : `${t('searchResultFail')} · ${searchResult.durationMs}ms`}
+                    </div>
+                    {searchResult.error !== undefined && <div>{searchResult.error}</div>}
+                    {searchResult.top.map(source => (
+                      <div key={source.url} style={{ color: '#444' }}>
+                        · {source.title ?? source.url}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {message !== '' && <p style={styles.msg}>{message}</p>}
         </>
       )}
     </div>
   )
+}
+
+/** Whether a provider name names one of the user's custom entries. */
+function isCustomName(name: string, customs: ReadonlyArray<{ name: string }>): boolean {
+  return customs.some(entry => entry.name === name)
 }

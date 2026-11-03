@@ -4,7 +4,7 @@
  * cooldown and drops out of rotation; when the cooldown expires it returns to
  * its configured position. This replaces the fixed primary→fallback pair with
  * an arbitrary-length, self-healing chain (the P3 "multi-level fallback" idea).
- * @module dsh-fetch-third-party/fallback
+ * @module dsh-fetch-search/fallback
  */
 
 /** Failure kind used to pick the cooldown length. */

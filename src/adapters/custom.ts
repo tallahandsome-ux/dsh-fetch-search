@@ -10,7 +10,7 @@
  *
  * The service itself fetches the target URL — the plugin host never connects
  * to it directly.
- * @module dsh-fetch-third-party/adapters/custom
+ * @module dsh-fetch-search/adapters/custom
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Fetch & Search",
+    "description": "Fetch page content through a third-party service you configure (Tavily / Jina / Firecrawl / contract-v1 crawler), and optionally route search through your own SearXNG instance. The local machine never connects to the target URL, so there is no SSRF surface; per-session budget, cache, and fallback chain included."
+  }
+}

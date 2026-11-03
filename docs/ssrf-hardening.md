@@ -1,6 +1,6 @@
 # SSRF 加固清单（给二次开发 / 直连 Provider）
 
-> dsh-fetch-third-party 本身走"快递员模式"（目标 URL 只经第三方服务抓取，本机不直连），默认无 SSRF 面。
+> dsh-fetch-search 本身走"快递员模式"（目标 URL 只经第三方服务抓取，本机不直连），默认无 SSRF 面。
 > 但如果你基于本插件做二次开发，或实现一个**本机直连目标 URL** 的 Provider（类似官方 `web-fetch-http`），
 > 请按下述清单加固，否则模型可诱导你抓取内网/云元数据地址。
 

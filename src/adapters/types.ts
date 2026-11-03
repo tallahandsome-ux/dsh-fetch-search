@@ -5,7 +5,7 @@
  * Adding a service = adding one adapter module (P2 direction 1); the provider
  * routes by the configured `adapter` id. User-built services (n8n / custom
  * crawler) conform to the fetch contract documented in docs/contract.md.
- * @module dsh-fetch-third-party/adapters
+ * @module dsh-fetch-search/adapters
  */
 
 import type { WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'

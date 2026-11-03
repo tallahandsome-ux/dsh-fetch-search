@@ -1,10 +1,11 @@
 /**
  * Locale copy for the fetch-third-party settings card.
- * @module dsh-fetch-third-party/client/locales
+ * @module dsh-fetch-search/client/locales
  */
 
 /** Locale keys this surface renders. */
 export type FetchCardLocaleKey =
+  | 'nav'
   | 'title' | 'description'
   | 'level1' | 'level2'
   | 'adapter' | 'adapterHint'
@@ -25,10 +26,19 @@ export type FetchCardLocaleKey =
   | 'customName' | 'customType' | 'customKeyRef' | 'customConditions'
   | 'keyRefHint'
   | 'loading'
+  | 'unavailable'
+  | 'proxyChipOn' | 'proxyChipOff' | 'proxyChipUnset' | 'proxyChipHint' | 'proxyChipUnsetHint'
+  | 'searchSection' | 'searchEnable' | 'searchEnableHint' | 'searchAdapter' | 'searchBaseUrl' | 'searchBaseUrlHint'
+  | 'searchLanguage' | 'searchLanguageHint' | 'searchCategories' | 'searchCategoriesHint'
+  | 'searchSafesearch' | 'searchSafesearchHint' | 'searchTimeout' | 'searchTimeoutHint' | 'searchMaxResults'
+  | 'searchKeyRef' | 'searchAuthHeader' | 'searchAuthPrefix' | 'searchAuthHint'
+  | 'searchTestQuery' | 'searchTestRun' | 'searchTesting' | 'searchTestHint' | 'searchResultOk' | 'searchResultFail'
+  | 'searchPinHint'
 
 /** English copy. */
 export const en: Record<FetchCardLocaleKey, string> = {
-  title: 'Web fetch (third party)',
+  nav: 'Web Fetch & Search',
+  title: 'Web fetch & search (third-party)',
   description: 'Fetch page content through a third-party service you configure. The local machine never connects to the target URL.',
   level1: 'Basic (provider & proxy)',
   level2: 'Provider settings (endpoint & key)',
@@ -84,14 +94,47 @@ export const en: Record<FetchCardLocaleKey, string> = {
   customName: 'Name',
   customType: 'Type',
   customKeyRef: 'API key ref',
-  customConditions: 'Adapter conditions: a custom service must satisfy contract v1 — POST {endpoint}, body { "url": "<target>" }, optional Authorization: Bearer <key>; respond 200 JSON { content, statusCode?, title? }. Or reuse a built-in adapter (pick jina/tavily/firecrawl + local endpoint, e.g. self-hosted Jina). See docs/contract.md.',
+  customConditions: 'Adapter conditions: a custom service must satisfy contract v1 — POST {endpoint}, body { "url": "<target>" }, optional Authorization: Bearer <key>; respond 200 JSON { content, statusCode?, title? }. A self-hosted Crawl4AI container needs no wrapper: pick type crawl4ai and point at its API server (default http://127.0.0.1:11235, token ref CRAWL4AI_API_KEY). Built-in adapters (jina/tavily/firecrawl) can also be reused with a custom endpoint. See docs/contract.md.',
   keyRefHint: 'Key ref:',
   loading: 'Loading…',
+  unavailable: 'Configuration is unavailable: this plugin entry is not active on the Host, or the settings form is not served for it.',
+  proxyChipOn: 'Fetch proxy on',
+  proxyChipOff: 'Fetch proxy off',
+  proxyChipUnset: 'Fetch proxy unset',
+  proxyChipHint: 'Toggle the local proxy applied to external fetch providers:',
+  proxyChipUnsetHint: 'No proxy address configured; set one in Settings → dsh-fetch-search.',
+  searchSection: 'Search (SearXNG)',
+  searchEnable: 'Enable the search provider',
+  searchEnableHint: 'Registers a `third-party` search provider. The model keeps using the same web_search tool; only the backend changes.',
+  searchAdapter: 'Search adapter',
+  searchBaseUrl: 'Instance base URL',
+  searchBaseUrlHint: 'Your SearXNG instance (local Docker or remote). `/search?format=json` is appended; the instance must enable the json formatter.',
+  searchLanguage: 'Language',
+  searchLanguageHint: 'SearXNG `language`, e.g. zh-CN. Blank = the instance default.',
+  searchCategories: 'Categories',
+  searchCategoriesHint: 'SearXNG `categories`, e.g. general. Blank = the instance default.',
+  searchSafesearch: 'Safe search',
+  searchSafesearchHint: '0 off / 1 moderate / 2 strict.',
+  searchTimeout: 'Timeout (s)',
+  searchTimeoutHint: 'One aggregated search. A cold instance can take 15s+ before engines warm up.',
+  searchMaxResults: 'Results per query',
+  searchKeyRef: 'Auth key ref',
+  searchAuthHeader: 'Auth header',
+  searchAuthPrefix: 'Auth prefix',
+  searchAuthHint: 'Only for a remote instance behind an authenticating proxy. Leave the key ref blank for an anonymous local instance.',
+  searchTestQuery: 'Test query',
+  searchTestRun: 'Test search',
+  searchTesting: 'Searching…',
+  searchTestHint: 'Runs one real search through the configured route (no cache, no budget).',
+  searchResultOk: 'OK — served by',
+  searchResultFail: 'Failed',
+  searchPinHint: 'A DSH restart is required after enabling: the profile `web` row must pin `searchProvider: third-party` (it replaces the whole row config, so restate `fetchProvider` too).',
 }
 
 /** 中文文案。 */
 export const zh: Record<FetchCardLocaleKey, string> = {
-  title: '网页抓取（第三方）',
+  nav: '网页抓取与搜索',
+  title: '网页抓取与搜索（第三方）',
   description: '通过你自行配置的第三方服务抓取网页内容。本机不直接连接目标网址。',
   level1: '基础设置（服务商与代理）',
   level2: '服务商配置（接口地址与 API Key）',
@@ -147,7 +190,39 @@ export const zh: Record<FetchCardLocaleKey, string> = {
   customName: '名称',
   customType: '类型',
   customKeyRef: 'API Key 引用',
-  customConditions: '适配条件：自定义服务需满足契约 v1 —— POST {接口地址}，Body { "url": "目标网址" }，可选 Authorization: Bearer {key}；返回 200 JSON { content, statusCode?, title? }。也可复用内置适配器（类型选 jina/tavily/firecrawl 并填本地地址，如自托管 Jina）。详见 docs/contract.md。',
+  customConditions: '适配条件：自定义服务需满足契约 v1 —— POST {接口地址}，Body { "url": "目标网址" }，可选 Authorization: Bearer {key}；返回 200 JSON { content, statusCode?, title? }。自建 Crawl4AI 容器无需 wrapper：类型选 crawl4ai，接口地址填其 API 服务（默认 http://127.0.0.1:11235，Key 引用 CRAWL4AI_API_KEY）。内置适配器（jina/tavily/firecrawl）也可配自定义地址复用。详见 docs/contract.md。',
   keyRefHint: 'Key 引用：',
   loading: '加载中…',
+  unavailable: '配置暂不可用：插件条目未在宿主侧启用，或其配置表单未被提供。',
+  proxyChipOn: '抓取代理·开',
+  proxyChipOff: '抓取代理·关',
+  proxyChipUnset: '抓取代理未设置',
+  proxyChipHint: '切换外部抓取服务商的本地代理：',
+  proxyChipUnsetHint: '尚未配置代理地址；请到 设置 → dsh-fetch-search 填写。',
+  searchSection: '搜索（SearXNG）',
+  searchEnable: '启用搜索 provider',
+  searchEnableHint: '注册 `third-party` 搜索 provider。模型侧仍是同一个 web_search 工具，只换后端。',
+  searchAdapter: '搜索适配器',
+  searchBaseUrl: '实例地址',
+  searchBaseUrlHint: '你的 SearXNG 实例（本地 Docker 或远端）。会自动追加 `/search?format=json`；实例必须开启 json 输出。',
+  searchLanguage: '语言',
+  searchLanguageHint: 'SearXNG 的 `language`，如 zh-CN。留空=实例默认。',
+  searchCategories: '分类',
+  searchCategoriesHint: 'SearXNG 的 `categories`，如 general。留空=实例默认。',
+  searchSafesearch: '安全搜索',
+  searchSafesearchHint: '0 关闭 / 1 中等 / 2 严格。',
+  searchTimeout: '超时（秒）',
+  searchTimeoutHint: '单次聚合搜索的超时。冷实例引擎热身需 15s+。',
+  searchMaxResults: '每次查询结果数',
+  searchKeyRef: '鉴权 Key 引用',
+  searchAuthHeader: '鉴权头名',
+  searchAuthPrefix: '鉴权前缀',
+  searchAuthHint: '仅远端/带鉴权的实例需要。本地匿名实例把 Key 引用留空即可。',
+  searchTestQuery: '测试查询词',
+  searchTestRun: '测试搜索',
+  searchTesting: '搜索中…',
+  searchTestHint: '按当前路由真实执行一次搜索（不走缓存、不消耗预算）。',
+  searchResultOk: '成功 — 由以下服务返回',
+  searchResultFail: '失败',
+  searchPinHint: '启用后需要重启 DSH：profile 的 `web` 行必须钉住 `searchProvider: third-party`（该行是整行替换，务必同时重述 `fetchProvider`）。',
 }

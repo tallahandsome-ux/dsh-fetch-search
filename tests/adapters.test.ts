@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WebFetchResult } from '@deepseek-ai/dsh-web'
+import { crawl4aiAdapter } from '../src/adapters/crawl4ai.ts'
 import { customAdapter } from '../src/adapters/custom.ts'
 import { firecrawlAdapter } from '../src/adapters/firecrawl.ts'
 import { jinaAdapter } from '../src/adapters/jina.ts'
@@ -196,5 +197,47 @@ describe('customAdapter', () => {
     const fn = stubFetch({ json: { content: 'x' } })
     await run(customAdapter, {}, ctx({ apiKey: 'sekret' }))
     expect(fn.mock.calls[0][1].headers.authorization).toBe('Bearer sekret')
+  })
+})
+
+describe('crawl4aiAdapter', () => {
+  it('extracts markdown from a successful /md response', async () => {
+    const fn = stubFetch({ json: { url: REQ.url, filter: 'fit', markdown: '# the page', success: true } })
+    const result = await run(crawl4aiAdapter, {})
+    expect(result).toEqual({
+      url: REQ.url, statusCode: 200, body: { kind: 'text', content: '# the page' }, truncated: false,
+    })
+    expect(fn.mock.calls[0][0]).toBe('https://api.example.test/md')
+    const init = fn.mock.calls[0][1] as RequestInit
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ url: REQ.url, f: 'fit' })
+  })
+
+  it('sends the Bearer token when a key is resolved', async () => {
+    const fn = stubFetch({ json: { markdown: 'body' } })
+    await run(crawl4aiAdapter, {}, ctx({ apiKey: 'tok-1' }))
+    const init = fn.mock.calls[0][1] as RequestInit
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer tok-1')
+  })
+
+  it('passes a non-2xx answer through as a result (401 without token)', async () => {
+    stubFetch({ ok: false, status: 401, text: 'missing token' })
+    const result = await run(crawl4aiAdapter, {})
+    expect(result.statusCode).toBe(401)
+    expect(result.body.content).toBe('missing token')
+  })
+
+  it('rejects with WEB_PROVIDER_ERROR when no markdown comes back', async () => {
+    stubFetch({ json: { success: false } })
+    const error = await expectWebError(run(crawl4aiAdapter, {}))
+    expect((error as { code?: string }).code).toBe('WEB_PROVIDER_ERROR')
+    expect(error.message).toContain('Crawl4AI')
+  })
+
+  it('rejects with WEB_PROVIDER_ERROR when the server is unreachable', async () => {
+    stubFetch({ throwError: new Error('ECONNREFUSED') })
+    const error = await expectWebError(run(crawl4aiAdapter, {}))
+    expect((error as { code?: string }).code).toBe('WEB_PROVIDER_ERROR')
+    expect(error.message).toContain('不可达')
   })
 })

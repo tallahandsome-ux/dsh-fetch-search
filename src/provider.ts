@@ -4,7 +4,7 @@
  * (the user picks it in the card — e.g. Jina Reader, keyless, as the safety
  * net), enforcing the per-session budget and resolving API keys from the
  * credentials domain per request.
- * @module dsh-fetch-third-party/provider
+ * @module dsh-fetch-search/provider
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
@@ -16,13 +16,14 @@ import type { FetchAdapter, FetchAdapterContext } from './adapters/types.ts'
 import { tavilyAdapter } from './adapters/tavily.ts'
 import { jinaAdapter } from './adapters/jina.ts'
 import { firecrawlAdapter } from './adapters/firecrawl.ts'
+import { crawl4aiAdapter } from './adapters/crawl4ai.ts'
 import { customAdapter } from './adapters/custom.ts'
 import type { FetchBudget } from './budget.ts'
 import type { FetchCache } from './cache.ts'
 import { classifyFailure, FallbackRouter, type ChainRow } from './fallback.ts'
 import { isLoopbackURL } from './local-stack.ts'
 import { assertPublicHttpURL } from './ssrf.ts'
-import { resolveProvider, type Config } from './settings.ts'
+import { resolveProvider, type Section } from './settings.ts'
 
 /**
  * Adapters shipped: one file per third-party service, plus the contract-v1
@@ -33,6 +34,7 @@ const ADAPTERS: Record<string, FetchAdapter> = {
   tavily: tavilyAdapter,
   jina: jinaAdapter,
   firecrawl: firecrawlAdapter,
+  crawl4ai: crawl4aiAdapter,
   custom: customAdapter,
 }
 
@@ -90,7 +92,7 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
 
   constructor(
     private readonly ctx: Context,
-    private readonly config: () => Config,
+    private readonly config: () => Section,
     private readonly budget: FetchBudget,
     private readonly cache: FetchCache,
   ) {}
@@ -111,7 +113,7 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
     if (config.cacheEnabled) {
       const hit = this.cache.get(request.url)
       if (hit !== undefined) {
-        console.log('[dsh-fetch-third-party] cache hit:', request.url)
+        console.log('[dsh-fetch-search] cache hit:', request.url)
         return hit
       }
     }
@@ -175,7 +177,7 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
    * @param persist - record cooldown state (false for the card's test fetch).
    */
   private async attemptWithChain(
-    config: Config,
+    config: Section,
     request: WebFetchRequest,
     signal: AbortSignal | undefined,
     persist: boolean,
@@ -215,7 +217,7 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
   }
 
   /** The chain used for routing: explicit config, else adapter+fallback. */
-  private effectiveChain(config: Config): string[] {
+  private effectiveChain(config: Section): string[] {
     if (config.fallbackChain.length > 0) {
       // Tolerate CJK-IME full-width separators (，、；) and stray whitespace in
       // hand-edited config or card input so a single mangled entry cannot
@@ -229,7 +231,7 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
   }
 
   /** The router for the current chain; rebuilt only when the chain changes. */
-  private chainRouter(config: Config): FallbackRouter {
+  private chainRouter(config: Section): FallbackRouter {
     const chain = this.effectiveChain(config)
     const key = chain.join(',')
     if (this.router === null || key !== this.routerKey) {
@@ -252,14 +254,14 @@ export class ThirdPartyFetchProvider implements WebFetchProvider {
   }
 
   /** The adapter driving one provider name, or undefined when unknown. */
-  private async adapterFor(config: Config, name: string): Promise<FetchAdapter | undefined> {
+  private async adapterFor(config: Section, name: string): Promise<FetchAdapter | undefined> {
     const resolved = resolveProvider(config, name)
     if (resolved === undefined) return undefined
     return ADAPTERS[resolved.adapter]
   }
 
   /** Build one provider's call context from its resolved facts. */
-  private async providerContext(config: Config, name: string): Promise<FetchAdapterContext> {
+  private async providerContext(config: Section, name: string): Promise<FetchAdapterContext> {
     const resolved = resolveProvider(config, name)
     if (resolved === undefined) throw new WebError(`unknown provider "${name}"`, 'WEB_PROVIDER_ERROR')
     const apiKey = await this.resolveKey(resolved.apiKeyEnv)

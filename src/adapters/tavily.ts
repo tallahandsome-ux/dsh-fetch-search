@@ -4,7 +4,7 @@
  * The request goes to Tavily's servers; Tavily fetches the target URL and
  * returns its content. The local machine never connects to the target —
  * this is the "courier" model that keeps the SSRF surface off the host.
- * @module dsh-fetch-third-party/adapters/tavily
+ * @module dsh-fetch-search/adapters/tavily
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Standalone Firecrawl verification for dsh-fetch-third-party acceptance.
+ * Standalone Firecrawl verification for dsh-fetch-search acceptance.
  *
  * Usage (from the fetch project root):
  *   $env:FIRECRAWL_API_KEY="fc-..." ; node scripts/verify-firecrawl.mjs

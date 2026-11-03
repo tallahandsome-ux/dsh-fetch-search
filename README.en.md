@@ -1,4 +1,4 @@
-# dsh-fetch-third-party
+# dsh-fetch-search
 
 中文 | [English](README.en.md)
 
@@ -50,6 +50,8 @@ fetch/
 
 Prerequisites: [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh) and pnpm.
 
+> **Compatibility**: v1.1.0+ targets the volatile-config era of dsh — requires **dsh ≥ 0.2.0-rc.0 and < 0.2.2** (verified against 0.2.0-rc.2 and 0.2.1-alpha.2). For dsh 0.1.x use v1.0.0. **Configuration entry**: Settings → **dsh-fetch-search** (a dedicated settings page, card expanded by default; `settings.section` slot); the same card also stays on the bundle's detail page in the Plugins panel. Every field saves instantly and hot-applies via volatile HMR. DSH Desktop users: the `desktop` profile is managed exclusively by the Electron app — install from inside it (Plugins panel → Add plugin → local `file:` path).
+
 ### Method 1: git install (recommended)
 
 ```powershell
@@ -61,10 +63,10 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 > ```yaml
 > # %USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml
 > allowBuilds:
->   "dsh-fetch-third-party@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
+>   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
 > ```
 
-After installing, **restart `dsh web`**; the "Web fetch (third party)" card appears under Settings → Plugins → Plugin configuration.
+After installing, **restart `dsh web`**; the bundle "dsh-fetch-search" appears in the Plugins panel under Installed plugins.
 
 ### Method 2: local build then install
 
@@ -74,16 +76,16 @@ For when you already have a local copy (e.g. a `git clone` you want to modify).
 
 ```powershell
 git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
-cd dsh-fetch-third-party
+cd dsh-fetch-search
 pnpm install
 pnpm build
-dsh plugin --profile web add file:D:\your-folder\dsh-fetch-third-party
+dsh plugin --profile web add file:D:\your-folder\dsh-fetch-search
 ```
 
-Replace `D:\your-folder\dsh-fetch-third-party` with the **actual directory you cloned to**. For example, if you cloned into `D:\plugins`:
+Replace `D:\your-folder\dsh-fetch-search` with the **actual directory you cloned to**. For example, if you cloned into `D:\plugins`:
 
 ```powershell
-dsh plugin --profile web add file:D:\plugins\dsh-fetch-third-party
+dsh plugin --profile web add file:D:\plugins\dsh-fetch-search
 ```
 
 How to tell it is correct: the path should directly contain `package.json`, `src/`, `tsdown.config.ts`, `scripts/`, etc.; if `Test-Path` passes and `package.json` is visible, it is correct. A wrong path (missing directory, or pointing at a file) makes `dsh plugin add` fail or install nothing.
@@ -93,7 +95,7 @@ How to tell it is correct: the path should directly contain `package.json`, `src
 ### Verifying the install
 
 1. Restart `dsh web` and hard-refresh the browser (Ctrl+F5).
-2. Settings → Plugins → Plugin configuration → "Web fetch (third party)" card.
+2. Settings → **dsh-fetch-search**: the dedicated page opens with the card expanded (the same card also lives on the bundle's detail page in the Plugins panel).
 3. Pick a provider (e.g. Jina Reader, keyless) and click "Test connection" — it should succeed.
 4. Start a new session; the model can fetch full pages via the `web_fetch_url` tool.
 
@@ -130,7 +132,7 @@ Additional recommendations:
 
 ### Switching providers
 
-Settings → Plugins → Plugin configuration → **Web fetch (third party)** card:
+Settings → **dsh-fetch-search**, or the Plugins-panel detail page → **Web fetch (third party)** card:
 
 1. **Provider** dropdown: `Tavily` / `Jina Reader` / `Firecrawl` / custom providers
 2. **API Key**: written to the managed credentials store (0600), only shows "configured / not configured"; Jina may be left blank (anonymous works), Tavily / Firecrawl recommended
@@ -185,7 +187,7 @@ node scripts/verify-firecrawl.mjs         # requires FIRECRAWL_API_KEY
 
 ```bash
 git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
-cd dsh-fetch-third-party
+cd dsh-fetch-search
 pnpm install        # build tools + type deps (@deepseek-ai/* declared as peer/dev, from npm)
 pnpm build          # tsdown dual output → lib/index.js (Host) + lib/client.js (browser card)
 pnpm typecheck      # tsc --noEmit
@@ -199,7 +201,7 @@ pnpm test           # vitest (settings resolution / budget / B1 regression)
 
 ### Original to this plugin (MIT)
 
-- `dsh-fetch-third-party` itself: provider registration, primary+fallback routing, per-session budget, settings bridge, GUI card, contract-v1 custom adapter, local-stack auto management (`local-stack` + watchdog)
+- `dsh-fetch-search` itself: provider registration, primary+fallback routing, per-session budget, settings bridge, GUI card, contract-v1 custom adapter, local-stack auto management (`local-stack` + watchdog)
 - **Fetch contract v1**: the integration standard for custom fetch services (see [docs/contract.md](docs/contract.md))
 
 ### Third-party projects used

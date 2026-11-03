@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   BASE_URL_BY_ADAPTER, DEFAULT_MAX_CONTENT_CHARS, KEY_ENV_BY_ADAPTER,
   resolveBaseURL, resolveKeyEnv, resolveProvider,
-  type Config,
+  type Section,
 } from '../src/settings.ts'
 
-function config(overrides: Partial<Config> = {}): Config {
+function config(overrides: Partial<Section> = {}): Section {
   return {
     adapter: 'firecrawl',
     fallback: '',
@@ -80,5 +80,27 @@ describe('resolveKeyEnv', () => {
   it('prefers the explicit primary override', () => {
     const cfg = config({ adapter: 'tavily', apiKeyEnv: 'MY_CUSTOM_REF' })
     expect(resolveKeyEnv(cfg)).toBe('MY_CUSTOM_REF')
+  })
+})
+
+describe('crawl4ai provider resolution', () => {
+  it('falls back to the standard ref for a crawl4ai custom entry with no explicit one', () => {
+    const cfg = config({
+      adapter: 'my-crawler',
+      customProviders: [{ name: 'my-crawler', adapter: 'crawl4ai', baseURL: 'http://127.0.0.1:11235', apiKeyEnv: '' }],
+    })
+    expect(resolveProvider(cfg, 'my-crawler')?.apiKeyEnv).toBe('CRAWL4AI_API_KEY')
+  })
+
+  it('keeps an explicit reference and empty-means-anonymous for jina-reuse entries', () => {
+    const cfg = config({
+      adapter: 'my-jina',
+      customProviders: [
+        { name: 'my-jina', adapter: 'jina', baseURL: 'http://127.0.0.1:3000', apiKeyEnv: '' },
+        { name: 'my-crawler-2', adapter: 'crawl4ai', baseURL: 'http://127.0.0.1:11236', apiKeyEnv: 'C4AI_TOKEN_2' },
+      ],
+    })
+    expect(resolveProvider(cfg, 'my-jina')?.apiKeyEnv).toBe('')
+    expect(resolveProvider(cfg, 'my-crawler-2')?.apiKeyEnv).toBe('C4AI_TOKEN_2')
   })
 })

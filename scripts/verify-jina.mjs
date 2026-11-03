@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Standalone Jina Reader verification for dsh-fetch-third-party acceptance.
+ * Standalone Jina Reader verification for dsh-fetch-search acceptance.
  *
  * Usage (from the fetch project root):
  *   node scripts/verify-jina.mjs                      # anonymous (no key)
