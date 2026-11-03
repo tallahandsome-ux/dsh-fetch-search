@@ -2,15 +2,18 @@
 
 [English](README.en.md) | 中文
 
-**安全的第三方网页抓取插件**（DSH / DeepSeek Harness）——让 AI 在「搜索摘要不够」时，能自主抓取网页全文来回答问题。
+**网页抓取 + 自建搜索插件**（DSH / DeepSeek Harness）——让 AI 在「搜索摘要不够」时自主抓取网页全文，并把联网搜索换成你自建的 SearXNG，不再按次计费。
 
 ## 简介
 
-本插件为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）提供**安全的网页抓取能力**：抓取委托给**用户自选/自建的第三方服务**（Tavily / Jina Reader / Firecrawl / 自定义契约服务），本机从不直接连接目标网址，因此**没有 SSRF 攻击面**。
+本插件为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）提供两个能力，都注册进官方的 `ctx.web` 插槽：
+
+- **安全的网页抓取**：抓取委托给**用户自选/自建的第三方服务**（Tavily / Jina Reader / Firecrawl / 自定义契约服务），本机从不直接连接目标网址，因此**没有 SSRF 攻击面**。
+- **自建搜索（2.0 起）**：把 `web_search` 的后端换成**你自己的 SearXNG** 实例，替代按次计费的官方联网搜索。
 
 核心能力：
 
-- **自主抓取**：模型先用官方 `web_search` 搜索，当摘要不足以回答问题时，会自动调用 `web_fetch_url` 抓取目标网页全文，无需用户提示。
+- **自主抓取**：模型先调用 `web_search` 搜索（后端由你配置——官方通道或自建 SearXNG），当摘要不足以回答问题时，会自动调用 `web_fetch_url` 抓取目标网页全文，无需用户提示。
 - **快递员模式**：目标网址只经用户配置的第三方服务抓取，本机零出站到任意 URL（无 SSRF 面）。
 - **多服务商 + 路由**：Tavily / Jina Reader / Firecrawl / 自定义服务（契约 v1，可多实例并存），主服务商失败自动回退到兜底服务商。
 - **API key 单一写入点**：key 只存托管保险箱（0600），卡片只显示“已配置/未配置”，永不回显。
@@ -65,9 +68,9 @@ fetch/
 
 前置：已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）与 pnpm。
 
-> **版本要求**：本插件 v1.1.0 起适配 dsh 的 volatile 配置体系（0.1.7 引入）与官方设置/插件页插槽，要求 **dsh ≥ 0.2.0-rc.0 且 < 0.2.2**（已实测 0.2.0-rc.2 与 0.2.1-alpha.2）。旧版 dsh（0.1.x）请使用 v1.0.0。
+> **版本要求**：本插件 v1.1.0 起适配 dsh 的 volatile 配置体系（0.1.7 引入）与官方设置/插件页插槽，要求 **dsh ≥ 0.2.0-rc.0 且 < 0.2.2**（已实测 0.2.0-rc.2、0.2.1-alpha.2 与 0.2.1-rc.3）。旧版 dsh（0.1.x）请使用 v1.0.0。
 >
-> **配置入口**：设置 → **dsh-fetch-search**（独立设置页，卡片默认展开；`settings.section` 插槽）。插件详情页（「插件」面板 → 已安装插件 → dsh-fetch-search）也保留同一张配置卡片。所有字段即时保存、经 volatile HMR 热生效，无需重启会话。
+> **配置入口**：设置 → **网页抓取与搜索**（独立设置页，卡片默认展开；`settings.section` 插槽）。插件详情页（「插件」面板 → 已安装插件）也保留同一张配置卡片。所有字段即时保存、经 volatile HMR 热生效，无需重启会话。
 >
 > **DSH Desktop 用户**：桌面版的 `desktop` profile 由 Electron 应用独占管理，命令行 `dsh plugin --profile desktop` 会被拒绝；请在桌面应用内操作——「插件」面板 → 添加插件 → 本地路径安装（`file:D:\...\dsh-fetch-search`）。
 
@@ -85,7 +88,7 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 >   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
 > ```
 
-安装完成后**重启 `dsh web`**；在 「插件」面板 → 已安装插件 中出现「dsh-fetch-search」卡片即安装成功。
+安装完成后**重启 `dsh web`**；在 「插件」面板 → 已安装插件 中出现「网页抓取与搜索」卡片即安装成功。
 
 ### 方式二：本地构建后安装
 
@@ -114,16 +117,17 @@ dsh plugin --profile web add file:D:\plugins\dsh-fetch-search
 ### 验证安装
 
 1. 重启 `dsh web`，浏览器 Ctrl+F5 强制刷新。
-2. 设置 → **dsh-fetch-search**：独立配置页默认展开；或「插件」面板 → 已安装插件 → dsh-fetch-search → 详情页。
+2. 设置 → **网页抓取与搜索**：独立配置页默认展开；或「插件」面板 → 已安装插件 → 详情页。
 3. 选择服务商（如 Jina Reader，免 key），点「测试连接」→ 应显示成功。
 4. 新建会话，模型即可通过 `web_fetch_url` 工具抓取网页全文。
+5. （可选）启用「搜索（SearXNG）」节并按其提示钉住 profile 的 `web` 行后，点「测试搜索」验证自建搜索链路。
 
 ### 配置如何保存与热生效（dsh ≥ 0.1.7 机制）
 
 - 插件 `Config` schema 的全部字段都标了 `.volatile()`：Plugins 页的配置表单通过官方 settings Remote 读写，改动持久化进 profile 的 `cordis.patch.yml`，并经 volatile HMR **热生效**（provider 的服务商、预算、缓存、回退链全部即时跟随，无需重启插件）。
 - 工具名（`toolName`）变化时插件自动重新注册工具；`web_fetch` 被占用时回退 `web_fetch_url`。
 - API key 仍只走 credentials Remote（`remote.credentials.set/unset/describe`），不经过任何插件自有路由。
-- 插件自有的 HTTP 桥接路由只剩两条**运行时状态**路由：`POST /api/fetch-third-party/test`（真实试连）与 `GET /api/fetch-third-party/chain`（回退链实时冷却状态）——配置与密钥都已收编进官方通道，旧的 apiproxy allowlist 限制在 0.1.2 后已不存在。
+- 插件自有的 HTTP 桥接路由只剩三条**运行时状态**路由：`POST /api/fetch-third-party/test`（真实试连）、`POST /api/fetch-third-party/search-test`（真实搜索测试）与 `GET /api/fetch-third-party/chain`（回退链实时冷却状态）——配置与密钥都已收编进官方通道，旧的 apiproxy allowlist 限制在 0.1.2 后已不存在。
 
 ## API Key 安全（必读）
 
@@ -143,7 +147,7 @@ dsh plugin --profile web add file:D:\plugins\dsh-fetch-search
 
 ### 服务商切换
 
-「插件」面板 → 插件详情页，或设置 → **dsh-fetch-search** → **网页抓取（第三方）** 卡片：
+「插件」面板 → 插件详情页，或设置 → **网页抓取与搜索** 卡片：
 
 1. **服务商**下拉：`Tavily` / `Jina Reader` / `Firecrawl` / 自定义服务商
 2. **API Key**：写入托管保险箱（0600），只显示“已配置/未配置”；Jina 可留空（匿名可用），Tavily / Firecrawl 建议配置
@@ -211,7 +215,7 @@ cd dsh-fetch-search
 pnpm install        # 安装构建工具 + 类型依赖（@deepseek-ai/* 以 peer/dev 声明，均来自 npm）
 pnpm build          # tsdown 双产物 → lib/index.js（Host）+ lib/client.js（浏览器卡片）
 pnpm typecheck      # tsc --noEmit
-pnpm test           # vitest（settings 解析 / budget 预算 / B1 回归）
+pnpm test           # vitest（settings / budget / adapters / searxng / search-provider；live SearXNG 套件需环境变量，CI 自动跳过）
 ```
 
 - **运行时**：`@deepseek-ai/*` 由 dsh 宿主提供（插件安装进 dsh profile 后从宿主 node_modules 解析），构建时按 external 处理，插件自身只声明 `undici` 为真实运行时依赖。
@@ -221,7 +225,7 @@ pnpm test           # vitest（settings 解析 / budget 预算 / B1 回归）
 
 ### 本插件原创（MIT）
 
-- `dsh-fetch-search` 插件本体：提供方注册、主+兜底路由、会话预算、设置桥接、GUI 卡片、契约 v1 自定义服务适配器、本地栈自动管理（`local-stack` + watchdog）
+- `dsh-fetch-search` 插件本体：抓取/搜索双 provider 注册、主+兜底路由、会话预算、设置桥接、GUI 卡片、契约 v1 自定义服务适配器、本地栈自动管理（`local-stack` + watchdog）、SearXNG 搜索适配器
 - **抓取契约 v1**：自定义抓取服务的对接标准（见 [docs/contract.md](docs/contract.md)）
 
 ### 使用/依赖的第三方项目
@@ -231,6 +235,7 @@ pnpm test           # vitest（settings 解析 / budget 预算 / B1 回归）
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（@deepseek-ai/dsh-*） | 宿主平台：cordis 插件机制、settings / credentials / tools / web 服务 | MIT |
 | [undici](https://github.com/nodejs/undici) | Node HTTP 客户端（按请求代理） | MIT |
 | [Crawl4AI](https://github.com/unclecode/crawl4ai) | 可选：自建抓取栈（用户自行 Docker 部署，插件经契约 v1 包装对接） | Apache-2.0 |
+| [SearXNG](https://github.com/searxng/searxng) | 可选：自建搜索实例（用户自行 Docker 部署，插件仅调用其 JSON API，不打包） | AGPL-3.0 |
 | [Jina Reader](https://github.com/jina-ai/reader) | Jina 服务商（公共 API 或自托管） | Apache-2.0 |
 | Tavily / Firecrawl | 第三方 SaaS 抓取服务（插件仅调用其公开 API，不打包） | 各服务商服务条款 |
 | react / tsdown / typescript / vitest | 构建与测试工具链 | MIT 系 |
@@ -240,7 +245,7 @@ pnpm test           # vitest（settings 解析 / budget 预算 / B1 回归）
 - **本插件不打包/不内置任何第三方爬虫引擎**。Crawl4AI、Jina Reader 等由用户按需部署，插件通过契约 v1 或复用内置适配器对接，目标网址仅经用户配置的第三方服务抓取。
 - **API key 只存托管保险箱**，不进代码 / 配置 / 文档；插件每次请求从保险箱现取，卡片永不回显。
 - **key 与安装方式无关**：无论从 git / 本地 / npm 哪种方式安装，插件都只从本机保险箱（`%USERPROFILE%\.dsh\.credentials.yaml`，0600）按引用名读取 key——仓库、代码、文档中不含任何密钥，从 GitHub 克隆也不会携带或泄露任何 key。
-- 本机**唯一出站面**是用户配置的第三方端点（“快递员模式”的代价，信任边界由用户决定）。
+- 本机**唯一出站面**是用户配置的第三方端点与自建搜索实例（“快递员模式”的代价，信任边界由用户决定）。
 - 自建 Crawl4AI 自身带 SSRF 防护，与本插件“本机不直连目标”的安全前提互补。
 
 ## 许可证
