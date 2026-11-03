@@ -73,7 +73,7 @@ Prerequisites: [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 ### Method 1: git install (recommended)
 
 ```powershell
-dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-search.git
 ```
 
 > **pnpm v11 first-install note**: pnpm v11 blocks build scripts of git dependencies by default; the first run may fail with `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`. The error prints the exact key to allow; add it to the profile `pnpm-workspace.yaml` and re-run, e.g.:
@@ -81,7 +81,7 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 > ```yaml
 > # %USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml
 > allowBuilds:
->   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
+>   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-search.git#<commit>": true
 > ```
 
 After installing, **restart `dsh web`**; the bundle appears in the Plugins panel under Installed plugins as "Web Fetch & Search".
@@ -93,7 +93,7 @@ For when you already have a local copy (e.g. a `git clone` you want to modify).
 **Key point: `file:` must point to the full absolute path of the clone directory — the folder that directly contains `package.json`.** Not the repo name, not a file, not the parent directory.
 
 ```powershell
-git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+git clone https://github.com/tallahandsome-ux/dsh-fetch-search.git
 cd dsh-fetch-search
 pnpm install
 pnpm build
@@ -205,7 +205,7 @@ node scripts/verify-firecrawl.mjs         # requires FIRECRAWL_API_KEY
 ## Development and building
 
 ```bash
-git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+git clone https://github.com/tallahandsome-ux/dsh-fetch-search.git
 cd dsh-fetch-search
 pnpm install        # build tools + type deps (@deepseek-ai/* declared as peer/dev, from npm)
 pnpm build          # tsdown dual output → lib/index.js (Host) + lib/client.js (browser card)

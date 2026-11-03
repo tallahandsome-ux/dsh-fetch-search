@@ -77,7 +77,7 @@ fetch/
 ### 方式一：git 安装（推荐）
 
 ```powershell
-dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-search.git
 ```
 
 > **pnpm v11 首次安装提示**：pnpm v11 默认拦截 git 依赖的构建脚本，首次执行可能报 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`。报错信息会给出需要放行的 key，把它加入 web profile 的 `pnpm-workspace.yaml` 后重新执行即可，例如：
@@ -85,7 +85,7 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 > ```yaml
 > # %USERPROFILE%\.dsh\profiles\web\pnpm-workspace.yaml
 > allowBuilds:
->   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-third-party.git#<commit>": true
+>   "dsh-fetch-search@git+https://github.com/tallahandsome-ux/dsh-fetch-search.git#<commit>": true
 > ```
 
 安装完成后**重启 `dsh web`**；在 「插件」面板 → 已安装插件 中出现「网页抓取与搜索」卡片即安装成功。
@@ -97,7 +97,7 @@ dsh plugin --profile web add https://github.com/tallahandsome-ux/dsh-fetch-third
 **关键：`file:` 后面要填克隆目录的完整绝对路径——也就是能直接看到 `package.json` 的那个文件夹。** 不是仓库名，不是某个文件，也不是父目录。
 
 ```powershell
-git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+git clone https://github.com/tallahandsome-ux/dsh-fetch-search.git
 cd dsh-fetch-search
 pnpm install
 pnpm build
@@ -210,7 +210,7 @@ node scripts/verify-firecrawl.mjs         # 需 FIRECRAWL_API_KEY
 ## 开发与构建
 
 ```bash
-git clone https://github.com/tallahandsome-ux/dsh-fetch-third-party.git
+git clone https://github.com/tallahandsome-ux/dsh-fetch-search.git
 cd dsh-fetch-search
 pnpm install        # 安装构建工具 + 类型依赖（@deepseek-ai/* 以 peer/dev 声明，均来自 npm）
 pnpm build          # tsdown 双产物 → lib/index.js（Host）+ lib/client.js（浏览器卡片）

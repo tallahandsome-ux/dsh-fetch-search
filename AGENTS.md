@@ -6,7 +6,7 @@ A DeepSeek Harness (dsh) plugin giving models **safe web fetching** and, since 2
 
 ## Repository
 
-- Repo: `https://github.com/tallahandsome-ux/dsh-fetch-third-party` (public, MIT)
+- Repo: `https://github.com/tallahandsome-ux/dsh-fetch-search` (public, MIT)
 - Branch: `main` (tags mark releases, e.g. `v1.0.0`)
 - Docs: `docs/contract.md` (custom-service contract v1), `docs/custom-crawler-research.md` (crawler selection), `docs/ssrf-hardening.md` (SSRF checklist for direct-connect second-dev)
 
@@ -22,7 +22,7 @@ pnpm test        # vitest
 
 - Configuration uses the **volatile Config** mechanism (dsh ≥ 0.1.7): every schema field is `.volatile()`, the Plugins page's bundle-configuration form (`plugins.bundle.config`, keyed by this package name) edits them through the official settings Remote, and `apply` reads them via `Volatile` references (`config.field.get()`), re-read on `loader/volatile-update`.
 - The card mounts in TWO seats over one controller: the Settings panel's own page (`settings.section`, id `web-fetch-search`, order 100 — expanded by default) and the bundle's Plugins-page detail seat (`plugins.bundle.config` — collapsed). The display name is 「网页抓取与搜索」 / 'Web Fetch & Search' (locale `meta.title` + card `nav`/`title`; changed from the package name at the user's request on 2026-11-03, after the plugin gained the search half).
-- **Identity rename (2026-11-03, user request)**: package `dsh-fetch-search`, row id / settings namespace `web-fetch-search`. The GitHub repo is still `tallahandsome-ux/dsh-fetch-third-party` (unrenamed — repo URLs keep the old token), and the bridge route prefix stays `/api/fetch-third-party` (invisible; deliberately not migrated), as does the locale namespace key `fetch-third-party`. Renaming the package or row id again means migrating the profile together with it: dependency key + `dsh.profile.bundles` entry in the profile's `package.json`, and the config row id in the profile's `cordis.patch.yml`.
+- **Identity rename (2026-11-03, user request)**: package `dsh-fetch-search`, row id / settings namespace `web-fetch-search`, GitHub repo `tallahandsome-ux/dsh-fetch-search` (renamed via the API the same day; GitHub redirects the old URL). The bridge route prefix stays `/api/fetch-third-party` (invisible; deliberately not migrated), as does the locale namespace key `fetch-third-party`. Renaming the package or row id again means migrating the profile together with it: dependency key + `dsh.profile.bundles` entry in the profile's `package.json`, and the config row id in the profile's `cordis.patch.yml`.
 - The entry MUST `export { Config }` — the Loader validates the raw row config against it, fills defaults, and wraps volatile fields; without the export the plugin receives `undefined` config and crashes.
 - The API key rides the **credentials Remote** (`ctx.remote.credentials.set/unset/describe` + the `credentials/reference-updated` event); the browser half mirrors this through `ctx.configForms.get('web-fetch-search')`.
 - The only private HTTP routes left are runtime state: `POST /api/fetch-third-party/test` and `GET /api/fetch-third-party/chain`. The old config/key/custom bridge routes and the apiproxy-allowlist workaround are obsolete (apiproxy was removed in dsh 0.1.2).
